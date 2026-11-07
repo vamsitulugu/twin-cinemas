@@ -14,4 +14,9 @@ export const audio={
  chat(){tone(880,.12,'sine',.12);tone(1320,.14,'sine',.08,.07)},
  crunch(){for(let i=0;i<4;i++)burst(.07,.25,2500+Math.random()*2000,i*.11)},
  chime(){tone(523,1.2,'sine',.15);tone(659,1.2,'sine',.12,.18);tone(784,1.6,'sine',.12,.36)},
- heart(){tone(660,.2,'triangle',.1,0,990)}};
+ heart(){tone(660,.2,'triangle',.1,0,990)},
+ add(){tone(740,.08,'sine',.1);tone(990,.1,'sine',.08,.06)},
+ bell(){tone(1568,.9,'sine',.12);tone(2093,.7,'sine',.06,.01)},
+ gift(){tone(523,.25,'triangle',.12);tone(784,.25,'triangle',.1,.12);tone(1046,.5,'triangle',.1,.24)},
+ sip(){burst(.35,.08,900);tone(300,.25,'sine',.04,.05,180)},
+ bite(){burst(.09,.2,1800);burst(.08,.16,2600,.12)}};

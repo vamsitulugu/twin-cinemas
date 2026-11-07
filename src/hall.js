@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
+import {buildLobby,LW,LD,LH} from './lobby.js';
+export {LW,LD,LH};
 
 /* ------------------------------------------------------------------
    Stadium-style cinema (reference: red + grey high-back seats, lit aisle
@@ -140,11 +142,7 @@ export function buildHall(scene,renderer){
   boxes.push({x0:x-.33,x1:x+.33,z0:z-.22,z1:z+.35})}
 
  /* ---------- lobby (outside the door) ---------- */
- const y0=floorY(DOOR_Z),DW=.8,lsh=new THREE.Shape();lsh.moveTo(-9,0);lsh.lineTo(9,0);lsh.lineTo(9,9);lsh.lineTo(-9,9);lsh.closePath();
- const lh=new THREE.Path();lh.moveTo(-DW,y0);lh.lineTo(DW,y0);lh.lineTo(DW,y0+2.4);lh.lineTo(-DW,y0+2.4);lh.closePath();lsh.holes.push(lh);
- const lw=new THREE.Mesh(new THREE.ShapeGeometry(lsh),M(0x4a2f2b,{bumpMap:bumpW,bumpScale:.5}));lw.position.z=DOOR_Z+.02;scene.add(lw);
- const lf=new THREE.Mesh(new THREE.PlaneGeometry(18,10),M(0x2e1e1b,{roughness:.5}));lf.rotation.x=-Math.PI/2;lf.position.set(0,y0,DOOR_Z+5);lf.receiveShadow=true;scene.add(lf);
- const ll=new THREE.PointLight(0xffc090,40,16,1.6);ll.position.set(0,y0+3.2,DOOR_Z+3);scene.add(ll);
+ const y0=floorY(DOOR_Z),DW=.8,lobby=buildLobby(scene,{y0,DOOR_Z});
  const sc=mkCanvas(512,96),sx=sc.getContext('2d');sx.fillStyle='#fff3e6';sx.shadowColor='#ff6a4a';sx.shadowBlur=18;sx.font='bold 52px system-ui';sx.textAlign='center';sx.fillText('TWIN CINEMA',256,66);
  const lsign=new THREE.Mesh(new THREE.PlaneGeometry(3.2,.6),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(sc),transparent:true}));lsign.position.set(0,y0+3.3,DOOR_Z+.06);scene.add(lsign);
  // double door (two leaves that slide apart)
@@ -154,10 +152,11 @@ export function buildHall(scene,renderer){
  box(.7,.22,.06,new THREE.MeshBasicMaterial({color:0x3dff7a}),0,y0+2.95,DOOR_Z+.1);
  sign(0,y0+2.75,DOOR_Z-.03,Math.PI);
 
- const api={seats,taken,door,screen,cL,cR,picks,floors:[flat,...treads],setScreen,fitScreen:a=>setScreen(kind,a),setScreenMap(t){screenMat.map=t||stex;screenMat.needsUpdate=true},sizes:Object.keys(SIZES),
+ const push=(p,r,b)=>{const cx2=cl(p.x,b.x0,b.x1),cz=cl(p.z,b.z0,b.z1),dx=p.x-cx2,dz=p.z-cz,d=Math.hypot(dx,dz);if(d<r){if(d>1e-4){p.x=cx2+dx/d*r;p.z=cz+dz/d*r}else p.z=b.z0-r}};
+ const api={lobby,lobbyMode:false,seats,taken,door,screen,cL,cR,picks,floors:[flat,...treads],setScreen,fitScreen:a=>setScreen(kind,a),setScreenMap(t){screenMat.map=t||stex;screenMat.needsUpdate=true},sizes:Object.keys(SIZES),
   setDoor(u){leaves[0].position.x=-DW/2-u*DW*.95;leaves[1].position.x=DW/2+u*DW*.95},
   /** house=1 full lights, 0.07 movie dark */
-  setLights(v){hemi.intensity=.06+.64*v;spot.intensity=60*v;lamps.forEach(l=>l.intensity=.7*v);bayLights.forEach(l=>l.intensity=9*v);warm.emissiveIntensity=.12+.88*v;washMats.forEach(m=>m.opacity=.1+.8*v);
+  setLights(v){lobby.setLights(v);hemi.intensity=.06+.64*v;spot.intensity=60*v;lamps.forEach(l=>l.intensity=.7*v);bayLights.forEach(l=>l.intensity=9*v);warm.emissiveIntensity=.12+.88*v;washMats.forEach(m=>m.opacity=.1+.8*v);
    stepMat.emissiveIntensity=.5+.8*v;dlMat.color.setScalar(.2+.8*v);scene.environmentIntensity=.05+.3*v;glow.intensity=6*(1-v)},
   setCurtains(o){cL.scale.x=cR.scale.x=1-.93*o},
   setSeatHighlight(id,hex){const s=seats.get(id);if(s){s.cushMat.emissive.setHex(hex||0);s.cushMat.emissiveIntensity=hex?.7:1}},
@@ -171,5 +170,6 @@ export function buildHall(scene,renderer){
   /** walking route to a seat: sideways to the nearest aisle, along the aisle, then along the row gap */
   route(p,seat){const side=Math.abs(seat.x)>.35?Math.sign(seat.x):(p.x<0?-1:1),ax=side*AISLE_X,pts=[];if(Math.abs(p.x-ax)>.3)pts.push([ax,p.z]);pts.push([ax,seat.aisle.z],[seat.x,seat.aisle.z]);return pts},
   /** keep a point (radius r) inside the hall and out of seat blocks */
-  resolve(p,r=.25,zMax=DOOR_Z-.4){p.x=cl(p.x,-HALF+.3,HALF-.3);p.z=cl(p.z,FRONT_Z+1,zMax);for(const b of boxes){const cx2=cl(p.x,b.x0,b.x1),cz=cl(p.z,b.z0,b.z1),dx=p.x-cx2,dz=p.z-cz,d=Math.hypot(dx,dz);if(d<r){if(d>1e-4){p.x=cx2+dx/d*r;p.z=cz+dz/d*r}else p.z=b.z0-r}}}};
+  resolve(p,r=.25,zMax=DOOR_Z-.4){if(api.lobbyMode){p.x=cl(p.x,-LW+.5,LW-.5);p.z=cl(p.z,DOOR_Z+.9,DOOR_Z+LD-.5);for(const b of lobby.boxes)push(p,r,b);return}
+   p.x=cl(p.x,-HALF+.3,HALF-.3);p.z=cl(p.z,FRONT_Z+1,zMax);for(const b of boxes)push(p,r,b)}};
  return api}
