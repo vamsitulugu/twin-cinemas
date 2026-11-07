@@ -1,7 +1,8 @@
 /* ------------------------------------------------------------------
    Cinema media player UI. Shown while the movie is playing, paused or on a break.
-   Working now: play/pause, -10/+10, seek, sound, full screen, camera view, Sync, End, More.
-   UI only (waiting for Twin Hearts): Message, Log, Voice, Video, 😊 reactions. They call c.hooks.<name>().
+   Working now: play/pause, -10/+10, seek, sound, full screen, camera, Sync, Message (opens the chat), Log (activity + chat),
+   😊 reactions, End, More.
+   UI only (waiting for Twin Hearts): Voice, Video. They call c.hooks.voice() / c.hooks.video().
    Use the returned setActive(name,bool) / setBadge(name,bool) to light a button or show its red dot.
 ------------------------------------------------------------------- */
 const ic=(p,s=22)=>`<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
@@ -24,10 +25,11 @@ const ICON={
  more:'<circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/>'};
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-/** c = { movie, fmt, present(), toast(text), playPause(), skip(sec), seekFrac(0..1), syncNow(), end(), seatView(),
-           full:{is(),toggle()}, mute:{get(),set(bool)}, more():[[label,fn]...], extra: HTMLElement|null, hooks:{message,log,voice,video,emoji} } */
+/** c = { movie, fmt, present(), busy(), playPause(), skip(sec), seekFrac(0..1), syncNow(), end(), seatView(),
+           full:{is(),toggle()}, mute:{get(),set(bool)}, more():[[label,fn]...], extra: HTMLElement|null,
+           reactions():[[icon,label,fn]...], log():[{k:'chat'|'sys', mine, x, vt}...], hooks:{message,voice,video} } */
 export function createPlayer(c){
- const {movie,fmt}=c,hk=c.hooks||{};let st='door',by='you',panel=null,hideT=0,seeking=false,lastTitle='',lastIcons='';
+ const {movie,fmt}=c,hk=c.hooks||{};let st='door',by='you',panel=null,hideT=0,seeking=false,lastTitle='',lastIcons='',lastPill='',lastTc='',lastTd='',toastT=0;
  const el=document.createElement('div');el.id='player';
  el.innerHTML=`
   <div class="pl-top"><button class="ib" data-a="back" title="Switch camera: seat / screen">${ic(ICON.back,26)}</button>
@@ -44,20 +46,20 @@ export function createPlayer(c){
     <button class="tb" data-a="video">${ic(ICON.video)}<span>Video</span></button>
     <button class="tb" data-a="end" title="End the movie">${ic(ICON.end)}<span>End</span></button>
     <button class="tb" data-a="more">${ic(ICON.more)}<span>More</span></button></div></div>
-  <div class="pnl" data-p="more"></div>`;
+  <div class="pnl" data-p="more"></div><div class="pnl" data-p="emoji"></div><div class="pnl" data-p="log"></div><div class="pl-toast"></div>`;
  document.body.appendChild(el);
  const q=s=>el.querySelector(s),sk=q('.sk');
 
  /* visibility: fades out while playing, any tap / move / key brings it back */
  const on=()=>['watch','paused','break'].includes(st);
  function show(){if(!on())return;el.classList.remove('hide');document.body.classList.remove('pl-hide');clearTimeout(hideT);
-  if(st==='watch'&&!panel&&!seeking)hideT=setTimeout(()=>{el.classList.add('hide');document.body.classList.add('pl-hide')},3500)}
+  if(st==='watch'&&!panel&&!seeking)hideT=setTimeout(()=>{if(c.busy?.())return show();el.classList.add('hide');document.body.classList.add('pl-hide')},3500)}   // c.busy(): stay up while the chat box is open
  for(const e of['pointerdown','pointermove','keydown','wheel'])addEventListener(e,()=>show(),{passive:true,capture:true});
 
  /* labels */
  const who=b=>b==='partner'?'Partner':'You';
  const pill=()=>st==='watch'?'Playing'+(c.present()?'':' · watching alone'):st==='paused'?`Paused by ${who(by)}`:st==='break'?`Break · ${who(by)}`:'';
- function refresh(){q('.pill').textContent=pill();q('.pill').dataset.s=st;
+ function refresh(){const pt=st+'|'+pill();if(pt!==lastPill){lastPill=pt;q('.pill').textContent=pill();q('.pill').dataset.s=st}
   const name=movie.meta?.name?movie.meta.name.replace(/\.[^.]+$/,''):'Demo movie',full=c.full.is(),muted=c.mute.get(),playing=st==='watch';
   if(name!==lastTitle){lastTitle=name;q('.pl-title b').textContent=name}
   const k=[playing,full,muted].join();if(k!==lastIcons){lastIcons=k;
@@ -66,34 +68,43 @@ export function createPlayer(c){
   if(!on()){panel=null;renderPanel()}refresh();show()}
 
  /* seek + clock (call every frame) */
- function tick(){if(!on())return;const d=movie.dur||0;if(!seeking&&d){sk.value=movie.time/d*1000;q('.tc').textContent=fmt(movie.time)}
-  q('.td').textContent=fmt(d);sk.style.setProperty('--p',(sk.value/10)+'%');refresh()}
- sk.addEventListener('input',()=>{seeking=true;const f=sk.value/1000;q('.tc').textContent=fmt(f*(movie.dur||0));sk.style.setProperty('--p',(sk.value/10)+'%');c.seekFrac(f);show()});
- sk.addEventListener('change',()=>{seeking=false;show()});
+ function tick(){if(!on())return;const d=movie.dur||0;if(!seeking&&d){sk.value=movie.time/d*1000;const t=fmt(movie.time);if(t!==lastTc){lastTc=t;q('.tc').textContent=t}}
+  const td=fmt(d);if(td!==lastTd){lastTd=td;q('.td').textContent=td}sk.style.setProperty('--p',(sk.value/10)+'%');refresh()}
+ sk.addEventListener('input',()=>{seeking=true;const f=sk.value/1000;lastTc=fmt(f*(movie.dur||0));q('.tc').textContent=lastTc;sk.style.setProperty('--p',(sk.value/10)+'%');c.seekFrac(f);show()});
+ sk.addEventListener('change',()=>{seeking=false;sk.blur();show()});   // blur: so Space / arrows keep working as player shortcuts
 
- /* "More" panel */
- function renderPanel(){const box=q('.pnl[data-p=more]');box.classList.toggle('open',panel==='more');q('[data-a=more]').classList.toggle('sel',panel==='more');
-  if(panel==='more'){const items=c.more();box.innerHTML=items.map((m,i)=>`<button data-m="${i}">${esc(m[0])}</button>`).join('');box._items=items;if(c.extra&&st!=='watch')box.appendChild(c.extra)}}
- const toggleMore=()=>{panel=panel==='more'?null:'more';renderPanel();show()};
+ /* panels: More (menu), Emoji (reactions), Log (activity + chat). One is open at a time. */
+ const PANELS=['more','emoji','log'],esc2=esc;
+ function renderPanel(){for(const p of PANELS){const box=q(`.pnl[data-p=${p}]`),open=panel===p;box.classList.toggle('open',open);q(`[data-a=${p}]`)?.classList.toggle('sel',open);if(!open)continue;
+   if(p==='more'){const items=c.more();box.innerHTML=items.map((m,i)=>`<button data-m="${i}">${esc(m[0])}</button>`).join('');box._items=items;if(c.extra&&st!=='watch')box.appendChild(c.extra)}
+   else if(p==='emoji'){const items=c.reactions();box.innerHTML=items.map((m,i)=>`<button data-m="${i}" class="rx" title="${esc2(m[1])}" aria-label="${esc2(m[1])}">${m[0]}</button>`).join('');box._items=items}
+   else{const rows=c.log();box.innerHTML=`<div class="lg-h">Activity &amp; chat</div>`+(rows.length?rows.map(r=>`<div class="lg ${r.k}${r.mine?' me':''}"><time>${fmt(r.vt)}</time><span>${esc(r.x)}</span></div>`).join(''):'<div class="lg sys"><span>Nothing yet</span></div>');box.scrollTop=box.scrollHeight}}}
+ const toggle=p=>{panel=panel===p?null:p;if(panel==='log')setBadge('log',false);renderPanel();show()};
+ const toast=t=>{const e=q('.pl-toast');e.textContent=t;e.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>e.classList.remove('on'),2200)};
+ const setBadge=(name,on2)=>{const d=q(`[data-a=${name}] .dot`);if(d)d.style.display=on2?'block':'none'};
+ const closePanel=()=>{if(panel){panel=null;renderPanel()}};
 
  /* actions */
  function act(a){switch(a){
-  case'back':c.seatView();break;
+  case'back':closePanel();c.seatView();break;
   case'mute':c.mute.set(!c.mute.get());break;
-  case'full':c.full.toggle();setTimeout(()=>{lastIcons='';refresh()},120);break;
+  case'full':closePanel();c.full.toggle();setTimeout(()=>{lastIcons='';refresh()},120);break;
   case'play':c.playPause();break;
   case'b10':c.skip(-10);break;case'f10':c.skip(10);break;
-  case'sync':c.syncNow();c.toast('Synced with your partner ♥');break;
+  case'sync':c.syncNow();toast(c.present()?'Synced with your partner ♥':'Your partner is not here yet');break;
   case'end':if(confirm('End the movie for both of you?'))c.end();break;
-  case'more':toggleMore();break;
+  case'more':case'emoji':case'log':toggle(a);break;
+  case'message':closePanel();setBadge('message',false);hk.message?.();break;
   // UI only: wire these to Twin Hearts through c.hooks
-  case'message':case'log':case'voice':case'video':case'emoji':hk[a]?.();break}}
- el.addEventListener('click',e=>{const mi=e.target.closest('[data-m]');if(mi){mi.closest('.pnl')._items[+mi.dataset.m][1]();panel=null;renderPanel();return}
-  const b=e.target.closest('[data-a]');if(b)act(b.dataset.a)});
+  case'voice':case'video':if(hk[a])hk[a]();else toast((a==='voice'?'Voice':'Video')+' calls are coming soon');break}}
+ el.addEventListener('click',e=>{const mi=e.target.closest('[data-m]');if(mi){const it=mi.closest('.pnl')._items[+mi.dataset.m];closePanel();it[it.length-1]();return}
+  const b=e.target.closest('[data-a]');if(b){act(b.dataset.a);b.blur()}});
  addEventListener('keydown',e=>{if(!on()||e.target.tagName==='INPUT'||e.ctrlKey||e.metaKey||e.altKey)return;const k=e.key.toLowerCase();
   if(k===' '||k==='k'){e.preventDefault();c.playPause()}else if(k==='arrowleft'||k==='j')act('b10');else if(k==='arrowright'||k==='l')act('f10');
-  else if(k==='m')act('mute');else if(k==='f')act('full');else if(k==='escape'&&panel){panel=null;renderPanel()}});
+  else if(k==='m')act('mute');else if(k==='f')act('full');else if(k==='escape')closePanel()});
  el.style.display='none';refresh();
- return{setState,tick,refresh:()=>{lastIcons='';refresh()},
+ return{setState,tick,refresh:()=>{lastIcons='';refresh()},toast,setBadge,
   /** light a bottom button: setActive('voice',true) */setActive:(name,on2)=>q(`[data-a=${name}]`)?.classList.toggle('on',!!on2),
-  /** red dot on Message / Log: setBadge('message',true) */setBadge:(name,on2)=>{const d=q(`[data-a=${name}] .dot`);if(d)d.style.display=on2?'block':'none'}}}
+  /** the Log changed: refresh it if open, otherwise show its red dot */logUpdated:(badge=true)=>{if(panel==='log')renderPanel();else if(badge)setBadge('log',true)},
+  /** top edge (px) of the seek bar, so the chat box can sit just above it; null when the player is not on screen */
+  bottomTop:()=>on()?q('.pl-seek').getBoundingClientRect().top:null}}

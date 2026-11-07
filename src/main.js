@@ -10,6 +10,7 @@ import {audio} from './audio.js';
 import {createCanteen} from './canteen.js';
 import {COUNTER_Z} from './lobby.js';
 import {createStudio} from './studio.js';
+import {createPlayer} from './controls.js';
 const $=id=>document.getElementById(id),wait=ms=>new Promise(r=>setTimeout(r,ms));
 const tween=(ms,f)=>new Promise(r=>{const s=performance.now();(function k(){const u=Math.min(1,(performance.now()-s)/ms);f(u*u*(3-2*u));u<1?requestAnimationFrame(k):r()})()});
 /* renderer / scene */
@@ -56,7 +57,7 @@ function buttons(){bar.innerHTML='';const s=m.state;
  if([S.WATCH,S.PAUSED,S.BREAK].includes(s)){B(s===S.WATCH?'⏸':'▶',s===S.WATCH?'Pause':'Play',()=>m.go(s===S.WATCH?S.PAUSED:S.WATCH),'main');B('🎥','Next camera angle · '+viewLabel(),nextAngle);B('⛶','Full screen · choose a view',openViews);B(movie.muted?'🔇':'🔊',movie.muted?'Sound off':'Sound on',()=>{movie.muted=!movie.muted;buttons()});B('☕','Break',()=>m.go(S.BREAK))}
  if(me&&m.is(S.SEATED,S.WATCH,S.PAUSED,S.BREAK))B('🍿',me.popcorn?'Put popcorn away':'Popcorn',togglePop,me.popcorn?'on':'');
  if(me&&!m.is(S.DOOR,S.ENTER,S.END)){B('❤️','Send love',()=>emote('heart'));B('👋','Wave',()=>emote('wave'));B('👏','Clap',()=>emote('clap'))}
- if([S.EXPLORE,S.SEATED,S.PAUSED,S.BREAK].includes(s))bar.appendChild(fileLabel);
+ if([S.EXPLORE,S.SEATED].includes(s))bar.appendChild(fileLabel);      // while watching, the player's More menu holds the file picker
  if(me&&!m.is(S.DOOR,S.ENTER)){bar.append(...RAIL)}          // chat / alerts / leave live in the same right-hand rail
  if(view==='full'){bar.innerHTML='';B('✕','Exit full screen',exitFull)}}
 m.on(async(s,p)=>{const ui=$('door-ui'),ov=$('ov');ui.style.display=s===S.DOOR?'flex':'none';ov.style.display='none';hall.lobbyMode=s===S.DOOR;if(s!==S.DOOR&&canteen.isOpen)canteen.close();
@@ -146,6 +147,32 @@ $('vw-x').onclick=closeViews;$('vw-fs').onclick=()=>document.fullscreenElement?f
 addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;const k=e.key;
  if(vw.style.display==='flex'){if(k==='Escape')closeViews();else if(/^[0-9]$/.test(k)){const v=VIEWS[(+k+9)%10];if(v)pickView(v.id)}}
  else if(k==='v'&&me&&m.is(S.WATCH,S.PAUSED,S.BREAK))openViews()});
+/* ---- cinema media player (src/controls.js): the bottom controls while the movie plays, is paused or on a break ---- */
+const chatLog=[];                                   // activity (play / pause / break…) and chat, shown by the Log button
+function logAdd(k,x,mine){chatLog.push({k,x,mine,vt:movie.time});if(chatLog.length>200)chatLog.shift();pl.logUpdated(!mine)}
+const seekTo=t=>{movie.seek(t);sync?.send({t:'seek',vt:movie.time})};
+const pl=createPlayer({movie,fmt,
+ present:()=>!!sync?.present,busy:()=>chatOpen,
+ playPause:()=>m.go(m.state===S.WATCH?S.PAUSED:S.WATCH),
+ skip:d=>seekTo(movie.time+d),
+ seekFrac:f=>seekTo(f*(movie.dur||0)),
+ syncNow:()=>sync?.send({t:'ctl',s:m.state,vt:movie.time}),      // your partner jumps to your time and state
+ end:()=>m.go(S.END),
+ seatView:()=>{const v=view==='screen'?'pov:me':'screen';watchView=v;setView(v)},   // "<": screen <-> your own seat
+ full:{is:()=>!!document.fullscreenElement||fullOn||view==='full',toggle:()=>document.fullscreenElement||fullOn||view==='full'?exitFull():fsOn()},
+ mute:{get:()=>movie.muted,set:v=>{movie.muted=v}},
+ more:()=>[['🎥 Next camera · '+viewLabel(),nextAngle],['🪟 Choose a view',openViews],
+  [m.state===S.BREAK?'▶ End the break':'☕ Take a break',()=>m.go(m.state===S.BREAK?S.WATCH:S.BREAK)],
+  ['🍿 '+(me?.popcorn?'Put popcorn away':'Popcorn'),togglePop],[muted?'🔔 Alerts on':'🔕 Alerts off',toggleAlerts],['🚪 Leave theatre',leaveTheatre]],
+ reactions:()=>[['❤️','Send love',()=>emote('heart')],['👋','Wave',()=>emote('wave')],['👏','Clap',()=>emote('clap')],['🍿',me?.popcorn?'Put popcorn away':'Popcorn',togglePop]],
+ log:()=>chatLog,extra:fileLabel,
+ hooks:{message:()=>toggleChat()}});                                // voice / video: not built yet, the player shows "coming soon"
+m.on((s,p)=>{const who=applying?'Your partner':'You',vt=movie.time;
+ pl.setState(s,p,applying?'partner':'you');
+ if(s===S.WATCH)logAdd('sys',p===S.SEATED?'The movie started':p===S.PAUSED?`${who} resumed`:p===S.BREAK?`${who} ended the break`:p===S.END?'Watching again':'Playing',!applying);
+ else if(s===S.PAUSED)logAdd('sys',`${who} paused`,!applying);
+ else if(s===S.BREAK)logAdd('sys',`${who} started a break`,!applying);
+ else if(s===S.END)logAdd('sys',p===S.WATCH&&vt>=(movie.dur||0)-1.5?'The movie ended':`${who} ended the movie`,!applying)});
 /* input */
 const keys={};addEventListener('keydown',e=>{if(e.target.tagName!=='INPUT')keys[e.key.toLowerCase()]=1});addEventListener('keyup',e=>delete keys[e.key.toLowerCase()]);
 const rc=new THREE.Raycaster(),nd=new THREE.Vector2();let target=null;
@@ -162,11 +189,11 @@ function bubbleTick(now){for(const[p,b]of bub){if(now-b.t>8000||!p.group.visible
    (camera comes a little closer); while the movie plays they appear subtitle-style low on the screen instead. */
 const chatEl=$('chat'),msgs=$('msgs'),cb=$('cb');let chatOpen=false,chatCam=null;const DEF={follow:{pitch:.55,dist:4},seat:{yaw:Math.PI*.15,pitch:.4,dist:3.2}};
 function feed(mine,x){const d=document.createElement('div');d.className='msg'+(mine?' me':'');d.textContent=x;msgs.appendChild(d);while(msgs.children.length>4)msgs.firstChild.remove();setTimeout(()=>{d.classList.add('out');setTimeout(()=>d.remove(),700)},8000)}
-function show(p,x){if(m.state===S.WATCH)feed(p===me,x);else say(p,x);if(p!==me&&!chatOpen&&m.state!==S.WATCH)cb.classList.add('new')}
-function placeChat(){const tops=[$('seek')].filter(e=>getComputedStyle(e).display!=='none').map(e=>e.getBoundingClientRect().top),top=fullOn?innerHeight-70:Math.min(innerHeight-14,...tops);
+function show(p,x){logAdd('chat',x,p===me);if(m.state===S.WATCH)feed(p===me,x);else say(p,x);if(p!==me&&!chatOpen&&m.state!==S.WATCH)cb.classList.add('new');if(p!==me&&!chatOpen)pl.setBadge('message',true)}
+function placeChat(){const tops=[$('seek')].filter(e=>getComputedStyle(e).display!=='none').map(e=>e.getBoundingClientRect().top).concat(pl.bottomTop()??[]),top=fullOn?innerHeight-70:Math.min(innerHeight-14,...tops);
  chatEl.style.bottom=(innerHeight-top+8)+'px';msgs.style.bottom=(innerHeight-top+8+(chatOpen?48:0))+'px'}
 function chatShot(){if(!chatOpen||m.is(S.WATCH,S.DOOR,S.ENTER))return;if(chatCam===null)chatCam=view;m.state===S.EXPLORE?setView('follow',{pitch:.3,dist:2.7}):setView('chat')}
-function openChat(){if(chatOpen||!me||m.is(S.DOOR,S.ENTER))return;chatOpen=true;cb.classList.remove('new');chatEl.style.display='flex';chatShot();placeChat();setTimeout(()=>$('ci').focus(),60)}
+function openChat(){if(chatOpen||!me||m.is(S.DOOR,S.ENTER))return;chatOpen=true;cb.classList.remove('new');pl.setBadge('message',false);chatEl.style.display='flex';chatShot();placeChat();setTimeout(()=>$('ci').focus(),60)}
 function closeChat(){if(!chatOpen)return;chatOpen=false;chatEl.style.display='none';$('ci').blur();
  if(chatCam!==null){const v=chatCam;chatCam=null;if(view==='chat'||(v==='follow'&&view==='follow'))setView(v,DEF[v])}placeChat()}
 const toggleChat=()=>chatOpen?closeChat():openChat();
@@ -178,7 +205,7 @@ function togglePop(){const on=!me.popcorn;me.setPop(on);sync?.send({t:'pop',on})
 function doEmote(p,e){if(e==='wave')p.av.emote('wave');else{const ch=e==='heart'?'❤️':'👏';head.copy(p.pos);head.y+=2.2;head.project(camera);const f=document.createElement('div');f.className='fl';f.textContent=ch;f.style.left=(head.x*.5+.5)*innerWidth+'px';f.style.top=(-head.y*.5+.5)*innerHeight+'px';document.body.appendChild(f);setTimeout(()=>f.remove(),2000)}
  if(e==='heart')audio.heart()}
 function emote(e){doEmote(me,e);sync?.send({t:'emo',e})}
-$('leave').onclick=()=>{if(confirm('Leave the theatre?')){sync?.close();location.reload()}};let muted=false;$('snd').onclick=()=>{muted=!muted;audio.mute(muted);$('snd').textContent=muted?'🔕':'🔔'};
+function leaveTheatre(){if(confirm('Leave the theatre?')){sync?.close();location.reload()}}$('leave').onclick=leaveTheatre;let muted=false;function toggleAlerts(){muted=!muted;audio.mute(muted);$('snd').textContent=muted?'🔕':'🔔'}$('snd').onclick=toggleAlerts;
 m.on((s,p)=>{$('top-r').style.display=s===S.DOOR?'none':(s===S.ENTER?'none':'flex');$('joy').style.display=s===S.EXPLORE&&matchMedia('(pointer:coarse)').matches?'block':'none';
  audio.ambient(s===S.WATCH?.015:.05);if(s===S.END)audio.chime()});
 {const joy=$('joy'),kn=joy.firstElementChild,mv=e=>{const r=joy.getBoundingClientRect(),dx=e.clientX-(r.left+55),dy=e.clientY-(r.top+55),d=Math.hypot(dx,dy),k=d>45?45/d:1;kn.style.transform=`translate(${dx*k}px,${dy*k}px)`;jx=dx*k/45;jz=dy*k/45};
@@ -202,7 +229,7 @@ renderer.setAnimationLoop(()=>{const raw=clock.getDelta(),dt=Math.min(raw,.05),t
   if(lz<1.25&&Math.abs(lx)<1&&role)startEnter()}
  movie.tick(dt);const now=performance.now();if(role===1&&sync?.present&&m.state===S.WATCH&&now-lastSync>3000){lastSync=now;sync.send({t:'sync',vt:movie.time,pl:movie.playing})}
  if(movie.dur&&now-lastUI>200){lastUI=now;const v=movie.time/movie.dur*1000,tc=fmt(movie.time),td=fmt(movie.dur);if(!UI.sk.matches(':active'))UI.sk.value=v;if(!UI.fsk.matches(':active'))UI.fsk.value=v;
-  if(UI.tcT!==tc){UI.tcT=tc;UI.tc.textContent=UI.ftc.textContent=tc}if(UI.tdT!==td){UI.tdT=td;UI.td.textContent=td}}
+  if(UI.tcT!==tc){UI.tcT=tc;UI.tc.textContent=UI.ftc.textContent=tc}if(UI.tdT!==td){UI.tdT=td;UI.td.textContent=td}pl.tick()}
  aud.forEach(a=>a.update(dt,t));if(me){me.update(dt,t);partner.update(dt,t);rig.ctx.me.copy(me.pos);rig.ctx.couple.copy(me.pos);if(partner.group.visible)rig.ctx.couple.add(partner.pos).multiplyScalar(.5);sync?.tick(performance.now(),me.av.walk,snap)}{const cx=rig.ctx,[sw,sh]=hall.dims();cx.sw=sw;cx.sh=sh;cx.sy=hall.screen.position.y;if(me){cx.chatT.copy(me.pos);if(partner.group.visible&&me.pos.distanceTo(partner.pos)<2.6)cx.chatT.add(partner.pos).multiplyScalar(.5);if(now-lastPlace>1000){lastPlace=now;placeChat()}}}
  rig.ctx.seated=!!(me&&me.seated);rig.ctx.taken=hall.taken;rig.ctx.mine=mySeat?.id||null;rig.ctx.lobbyY=floorY(DOOR_Z);rig.ctx.lobby=m.state===S.DOOR;if(m.is(S.DOOR,S.ENTER))hall.lobby.update(t);
  bubbleTick(now);if(!(movie.src&&m.is(S.WATCH,S.PAUSED,S.BREAK,S.END))&&now-lastScr>66){lastScr=now;hall.drawScreen(t,m.is(S.WATCH,S.PAUSED,S.BREAK),movie.dur?movie.time/movie.dur:0)}

@@ -113,3 +113,63 @@ button{border-radius:999px}
 #bar [data-tip]::before{content:"";position:absolute;right:calc(100% + 6px);top:50%;margin-top:-5px;border:5px solid transparent;border-left-color:#0b0d1cf2;opacity:0;transition:opacity .12s;pointer-events:none;z-index:5}
 @media(hover:hover){#bar [data-tip]:hover::after,#bar [data-tip]:focus-visible::after{opacity:1;transform:translate(0,-50%)}#bar [data-tip]:hover::before,#bar [data-tip]:focus-visible::before{opacity:1}}
 @media(hover:none){#bar [data-tip]:active::after{opacity:1;transform:translate(0,-50%)}#bar [data-tip]:active::before{opacity:1}}   /* touch: the name shows while you press */
+
+/* ---------- cinema media player (src/controls.js) ----------
+   Shown while the movie is playing, paused or on a break. The overlay itself never blocks the 3D view:
+   only the buttons, the seek bar and the open panels take taps, so you can still drag to look around. */
+#player{position:fixed;inset:0;z-index:8;color:#fff;transition:opacity .35s;user-select:none;-webkit-user-select:none;pointer-events:none}
+#player *{pointer-events:none}
+#player button,#player input,#player .pnl.open,#player .pnl.open *{pointer-events:auto}
+#player.hide{opacity:0}#player.hide button,#player.hide input,#player.hide .pnl.open,#player.hide .pnl.open *{pointer-events:none}
+body.pl #bar,body.pl #seek,body.pl #top-r{display:none!important}      /* the old emoji bar gives way to the player */
+body.pl #tip{top:max(64px,calc(env(safe-area-inset-top) + 58px))}
+body.pl-hide{cursor:none}
+#player button{background:none;border:0;border-radius:0;padding:0;color:#fff;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+/* top: back / title + who-paused pill / sound + full screen */
+.pl-top{position:absolute;top:0;left:0;right:0;display:flex;align-items:flex-start;justify-content:space-between;
+ padding:max(8px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) 30px max(10px,env(safe-area-inset-left));background:linear-gradient(#000b,#0000)}
+#player .ib{width:44px;height:44px;display:grid;place-items:center;border-radius:50%}#player .ib:active{background:#ffffff26}
+.pl-tr{display:flex;gap:2px}
+.pl-title{position:absolute;left:50%;top:max(8px,env(safe-area-inset-top));transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:5px;max-width:calc(100% - 210px);padding-top:3px}
+.pl-title b{font-size:14px;font-weight:700;letter-spacing:.3px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 4px #000}
+.pill{font-size:11px;line-height:1;padding:5px 11px;border-radius:999px;white-space:nowrap;color:#f3b84a;background:#3a2a0acc;border:1px solid #f3b84a40}
+.pill:empty{display:none}.pill[data-s=watch]{color:#9ef0b8;background:#0f2a1acc;border-color:#9ef0b840}.pill[data-s=break]{color:#d8b4ff;background:#2a1448cc;border-color:#d8b4ff40}
+/* middle: back 10 / play-pause / forward 10 */
+.pl-mid{position:absolute;left:50%;top:48%;transform:translate(-50%,-50%);display:flex;align-items:center;gap:clamp(26px,7vw,48px)}
+#player .big,#player .skip{border-radius:50%;background:#000a;border:1px solid #ffffff2e;display:grid;place-items:center;position:relative;backdrop-filter:blur(3px);transition:transform .12s,background .2s}
+.big{width:82px;height:82px}.skip{width:58px;height:58px}
+#player .big:active,#player .skip:active{transform:scale(.92);background:#000a}
+.skip svg{width:28px;height:28px;margin-top:-8px}.skip i{position:absolute;inset:0;display:grid;place-items:end center;padding-bottom:11px;font-style:normal;font-size:10px;font-weight:700}
+#player .pl-emoji{position:absolute;right:max(14px,env(safe-area-inset-right));top:min(68%,calc(100% - 190px));transform:translateY(-50%);width:44px;height:44px;border-radius:50%;font-size:25px;line-height:1;background:#0005;display:grid;place-items:center}
+#player .pl-emoji.sel{background:#ffffff30}
+/* bottom: seek bar + the button row */
+.pl-bot{position:absolute;left:0;right:0;bottom:0;padding:38px max(14px,env(safe-area-inset-right)) max(6px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left));background:linear-gradient(#0000,#000c 58%)}
+.pl-seek{display:flex;align-items:center;gap:10px;font-size:11px;font-variant-numeric:tabular-nums;text-shadow:0 1px 3px #000}.pl-seek span{min-width:30px}.pl-seek .td{text-align:right}
+.sk{flex:1;min-width:0;height:24px;margin:0;background:transparent;-webkit-appearance:none;appearance:none;cursor:pointer;touch-action:none;accent-color:#e5322d}
+.sk::-webkit-slider-runnable-track{height:3px;border-radius:3px;background:linear-gradient(90deg,#e5322d var(--p,0%),#ffffff55 var(--p,0%))}
+.sk::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:15px;height:15px;margin-top:-6px;border-radius:50%;background:#fff;border:3.5px solid #e5322d;box-shadow:0 0 0 1px #0006}
+.sk::-moz-range-track{height:3px;border-radius:3px;background:#ffffff55}.sk::-moz-range-progress{height:3px;border-radius:3px;background:#e5322d}
+.sk::-moz-range-thumb{width:9px;height:9px;border-radius:50%;background:#fff;border:3.5px solid #e5322d}
+.pl-row{display:flex;justify-content:space-around;width:min(100%,900px);margin:0 auto}
+.tb{position:relative;flex:1;max-width:120px;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px 4px;font-size:10px;line-height:1.1;opacity:.92;transition:transform .12s,color .2s}
+.tb:active{transform:scale(.92)}.tb.on{color:var(--accent)}.tb.sel{color:var(--p1)}
+.dot{display:none;position:absolute;top:3px;left:calc(50% + 6px);width:9px;height:9px;border-radius:50%;background:#ff3b30;border:1.5px solid #000;font-style:normal}
+/* panels: More / reactions / log */
+.pnl{display:none;position:absolute;background:#161a3af2;border:1px solid var(--line);border-radius:14px;box-shadow:0 8px 30px #000a;backdrop-filter:blur(8px)}.pnl.open{display:flex}
+#player .pnl button{display:flex;align-items:center;padding:9px 12px;margin:3px;border-radius:10px;font-size:13px;text-align:left;white-space:nowrap;background:#ffffff0d}#player .pnl button:active{background:#ffffff26}
+.pnl[data-p=more]{right:calc(max(10px,env(safe-area-inset-right)) + 56px);bottom:calc(max(6px,env(safe-area-inset-bottom)) + 92px);display:none;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));padding:6px;max-height:calc(100% - 190px);overflow-y:auto;width:min(380px,calc(100% - 76px))}.pnl[data-p=more].open{display:grid}
+.pnl[data-p=more] .btn{grid-column:1/-1;margin:3px;text-align:center}
+.pnl[data-p=emoji]{right:70px;top:min(68%,calc(100% - 190px));transform:translateY(-50%);padding:4px;gap:2px}
+#player .pnl button.rx{font-size:26px;padding:6px 9px;line-height:1}
+.pnl[data-p=log]{left:50%;transform:translateX(-50%);bottom:calc(max(6px,env(safe-area-inset-bottom)) + 92px);width:min(430px,calc(100% - 20px));max-height:min(46%,260px);flex-direction:column;overflow-y:auto;padding:6px 12px 10px}
+.lg-h{position:sticky;top:-6px;padding:6px 0;margin-bottom:2px;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:#ffb15c;background:linear-gradient(#161a3a,#161a3af2)}
+.lg{display:flex;gap:9px;padding:3px 0;font-size:13px;line-height:1.35;word-break:break-word}.lg time{flex:none;min-width:34px;font-size:11px;color:var(--mute);font-variant-numeric:tabular-nums;padding-top:1px}
+.lg.chat span{color:#bfe0ff}.lg.chat.me span{color:#ffc2d4}.lg.sys span{color:var(--mute);font-style:italic}
+.pl-toast{position:absolute;left:50%;bottom:calc(max(6px,env(safe-area-inset-bottom)) + 108px);transform:translate(-50%,8px);background:#000d;border:1px solid #ffffff26;border-radius:999px;padding:8px 15px;font-size:13px;white-space:nowrap;opacity:0;transition:opacity .25s,transform .25s}.pl-toast.on{opacity:1;transform:translate(-50%,0)}
+/* short screens (a phone held sideways) */
+@media (max-height:480px){
+ .pl-top{padding-bottom:16px}.pl-bot{padding-top:26px}.pl-mid{top:46%}.big{width:70px;height:70px}.skip{width:52px;height:52px}
+ .tb{padding:3px 2px 2px}.tb svg{width:20px;height:20px}.pnl[data-p=more],.pnl[data-p=log]{bottom:calc(max(6px,env(safe-area-inset-bottom)) + 80px)}.pl-toast{bottom:calc(max(6px,env(safe-area-inset-bottom)) + 92px)}
+ .pl-emoji{top:min(66%,calc(100% - 150px))}.pnl[data-p=emoji]{top:min(66%,calc(100% - 150px))}}
+body.pl #ov{justify-content:flex-start;padding-top:max(76px,16vh)}      /* "Break time" / "Tap to join" stay above the centre buttons */
+body.pl #bagbtn{top:calc(max(8px,env(safe-area-inset-top)) + 54px);transition:opacity .35s}body.pl-hide #bagbtn{opacity:0;pointer-events:none}      /* keep "My snacks" clear of the back arrow, and fade it with the controls */
