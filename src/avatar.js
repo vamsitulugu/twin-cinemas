@@ -13,10 +13,15 @@ export const loadAvatars=async(progress)=>{const L=new GLTFLoader(),keys=Object.
  gl.extra={f:[],m:[]};try{const idx=await(await fetch('/models/audience/index.json')).json();   // optional: more MetaPerson avatars dropped in /public/models/audience
   for(const g of['f','m'])for(const f of idx[g]||[]){try{gl.extra[g].push(await L.loadAsync('/models/audience/'+f))}catch{}}}catch{}
  return gl};
-function aim(b,c,d){b.updateWorldMatrix(true,true);const v=wp(c).sub(wp(b)).normalize(),qb=b.getWorldQuaternion(new THREE.Quaternion()),qd=new THREE.Quaternion().setFromUnitVectors(v,d.clone().normalize()),pq=b.parent.getWorldQuaternion(new THREE.Quaternion()).invert();b.quaternion.copy(pq.multiply(qd.multiply(qb)));b.updateWorldMatrix(false,true)}
+const _a1=new THREE.Vector3(),_a2=new THREE.Vector3(),_a3=new THREE.Vector3(),_qA=new THREE.Quaternion(),_qB=new THREE.Quaternion(),_qC=new THREE.Quaternion();
+/** point bone b so that the direction b->c matches d. Uses shared scratch objects: no garbage per frame. */
+function aim(b,c,d){b.updateWorldMatrix(true,true);c.getWorldPosition(_a1);b.getWorldPosition(_a2);_a1.sub(_a2).normalize();b.getWorldQuaternion(_qA);
+ _qB.setFromUnitVectors(_a1,_a3.copy(d).normalize());b.parent.getWorldQuaternion(_qC).invert();b.quaternion.copy(_qC.multiply(_qB.multiply(_qA)));b.updateWorldMatrix(false,true)}
+/** ring of reusable vectors for the per-frame pose directions (aim() consumes each one immediately) */
+const VT=(()=>{const p=Array.from({length:96},()=>new THREE.Vector3());let i=0;return(x,y,z)=>p[i++%96].set(x,y,z)})();
 /** opts: height (m), look (see look.js: per-part recolour), hide (mesh names), walker (can walk), seated (start seated, e.g. audience), headScale (number or [x,y,z]), relaxed (straight legs, straight arms: use for the couple) */
 export function makeAvatar(gltf,{height=1.7,look,hide=[],walker=false,seated=false,headScale=1,relaxed=false,style=''}={}){
- const m=clone(gltf.scene),group=new THREE.Group();group.add(m);const _q=new THREE.Quaternion(),A=(b,c,d)=>aim(b,c,d.clone().applyQuaternion(group.getWorldQuaternion(_q)));   // pose directions are in the avatar's own frame, so limbs follow its facing
+ const m=clone(gltf.scene),group=new THREE.Group();group.add(m);const _q=new THREE.Quaternion(),_ad=new THREE.Vector3(),A=(b,c,d)=>aim(b,c,_ad.copy(d).applyQuaternion(group.getWorldQuaternion(_q)));   // pose directions are in the avatar's own frame, so limbs follow its facing
  const bn=n=>m.getObjectByName('mixamorig'+n)||m.getObjectByName(n),B={};NAMES.forEach(n=>B[n]=bn(n));const hips=bn('Hips');
  group.updateMatrixWorld(true);const ff=()=>(wp(B.LeftFoot).y+wp(B.RightFoot).y)/2;
  m.scale.multiplyScalar((height-.3)/(wp(B.Head).y-ff()));group.updateMatrixWorld(true);m.position.y-=ff()-.08;group.updateMatrixWorld(true);
@@ -32,9 +37,9 @@ export function makeAvatar(gltf,{height=1.7,look,hide=[],walker=false,seated=fal
  const wb=all.map((b,i)=>[b,rest[i][0]]),my=m.position.y,leg=wp(B.LeftUpLeg).y-wp(B.LeftFoot).y,headQ=sb.find(s=>s.b===B.Head).q,seed=Math.random()*9,yq=new THREE.Quaternion();
  if(Array.isArray(headScale))B.Head.scale.set(...headScale);else if(headScale!==1)B.Head.scale.setScalar(headScale);
  const ST={m:{sw:.4,as:.42,hy:.1,tw:.3,roll:.05,lean:.03,bend:.38,cad:6,bob:.014,chest:.025},f:{sw:.36,as:.3,hy:.18,tw:.26,roll:.09,lean:.02,bend:.3,cad:5.8,bob:.01,chest:.012}}[style],
-  P={...(relaxed?{knee:.015,fore:.08,spread:.05,sw:.36,lift:.5,as:.5}:{knee:.12,fore:.5,spread:.12,sw:.46,lift:.75,as:.4}),...(ST?{sw:ST.sw,as:ST.as,lift:.55,spread:.07}:{})},_e=new THREE.Euler(0,0,0,'YXZ'),_r=new THREE.Quaternion(),_g=new THREE.Quaternion(),_p=new THREE.Quaternion();
+  P={...(relaxed?{knee:.015,fore:.08,spread:.05,sw:.36,lift:.5,as:.5}:{knee:.12,fore:.5,spread:.12,sw:.46,lift:.75,as:.4}),...(ST?{sw:ST.sw,as:ST.as,lift:.55,spread:.07}:{})},_e=new THREE.Euler(0,0,0,'YXZ'),_r=new THREE.Quaternion(),_g=new THREE.Quaternion(),_p=new THREE.Quaternion(),_Rw=new THREE.Quaternion(),_gi=new THREE.Quaternion(),_pi=new THREE.Quaternion();
  /** rotate bone b by an (x pitch, y yaw, z roll) turn measured in the avatar's own frame (so it works whatever way it faces) */
- const rotW=(b,x,y,z)=>{group.getWorldQuaternion(_g);_r.setFromEuler(_e.set(x,y,z));const Rw=_g.clone().multiply(_r).multiply(_g.clone().invert());b.parent.getWorldQuaternion(_p);b.quaternion.premultiply(_p.clone().invert().multiply(Rw).multiply(_p));b.updateWorldMatrix(false,true)};
+ const rotW=(b,x,y,z)=>{group.getWorldQuaternion(_g);_r.setFromEuler(_e.set(x,y,z));_gi.copy(_g).invert();_Rw.copy(_g).multiply(_r).multiply(_gi);b.parent.getWorldQuaternion(_p);_pi.copy(_p).invert().multiply(_Rw).multiply(_p);b.quaternion.premultiply(_pi);b.updateWorldMatrix(false,true)};
  /** stylish body language: pelvis sway, counter-twisting shoulders, steady head, soft weight shift when idle */
  const stylePose=(a,t,ph)=>{const s=Math.sin(ph),c=Math.cos(ph),id=1-a,w=Math.sin(t*.55+seed),h=Math.sin(t*.33+seed*2);
   rotW(hips,ST.lean*a,-ST.hy*s*a,ST.roll*s*a+.03*w*id);
@@ -43,16 +48,16 @@ export function makeAvatar(gltf,{height=1.7,look,hide=[],walker=false,seated=fal
   rotW(B.Spine2,ST.lean*.2*a,ST.tw*.4*s*a,-ST.roll*.2*s*a);
   rotW(B.Neck,-ST.lean*.8*a,.3*(-ST.hy+ST.tw)*s*a*-1,0);
   rotW(B.Head,-ST.lean*.6*a,(.12*h+.05*Math.sin(t*.9+seed))*id,.04*h*id)};
- const av={group,sit:seated?1:0,walk:0,amp:0,ph:0,wave:0,emote(n){if(n==='wave')av.wave=2.2},
+ let lastPose=-1;const av={group,sit:seated?1:0,walk:0,amp:0,ph:0,wave:0,emote(n){if(n==='wave')av.wave=2.2},
   walkPose(t=0){wb.forEach(([b,q])=>b.quaternion.copy(q));const a=av.amp;if(ST)stylePose(a,t,av.ph);
    ['Left','Right'].forEach((n,i)=>{const f=av.ph+i*Math.PI,k=sg[n],th=P.sw*a*Math.sin(f),ps=th-(P.knee+P.lift*a*Math.max(0,Math.cos(f))),al=-P.as*a*Math.sin(f);
-    A(B[n+'UpLeg'],B[n+'Leg'],V(.03*k,-Math.cos(th),Math.sin(th)));A(B[n+'Leg'],B[n+'Foot'],V(0,-Math.cos(ps),Math.sin(ps)));A(B[n+'Foot'],B[n+'ToeBase'],V(0,-.1,1));
-    A(B[n+'Arm'],B[n+'ForeArm'],V(P.spread*k,-Math.cos(al),Math.sin(al)));A(B[n+'ForeArm'],B[n+'Hand'],V((P.spread*.6)*k,-Math.cos(al+P.fore+(ST?ST.bend*a*Math.max(0,-Math.sin(f))+.12*a:0)),Math.sin(al+P.fore+(ST?ST.bend*a*Math.max(0,-Math.sin(f))+.12*a:0))))});
+    A(B[n+'UpLeg'],B[n+'Leg'],VT(.03*k,-Math.cos(th),Math.sin(th)));A(B[n+'Leg'],B[n+'Foot'],VT(0,-Math.cos(ps),Math.sin(ps)));A(B[n+'Foot'],B[n+'ToeBase'],VT(0,-.1,1));
+    A(B[n+'Arm'],B[n+'ForeArm'],VT(P.spread*k,-Math.cos(al),Math.sin(al)));A(B[n+'ForeArm'],B[n+'Hand'],VT((P.spread*.6)*k,-Math.cos(al+P.fore+(ST?ST.bend*a*Math.max(0,-Math.sin(f))+.12*a:0)),Math.sin(al+P.fore+(ST?ST.bend*a*Math.max(0,-Math.sin(f))+.12*a:0))))});
    m.position.y=my-leg*a*(1-Math.cos(P.sw*Math.abs(Math.sin(av.ph))))+(ST?ST.bob*a*Math.cos(2*av.ph):0)},
-  update(dt,t){if(walker){av.amp+=((av.walk&&av.sit<.5?1:0)-av.amp)*Math.min(1,dt*8);av.ph+=dt*(ST?ST.cad:6.8)*av.amp;if(av.sit<1)av.walkPose(t);
+  update(dt,t){if(walker){av.amp+=((av.walk&&av.sit<.5?1:0)-av.amp)*Math.min(1,dt*8);av.ph+=dt*(ST?ST.cad:6.8)*av.amp;if(av.sit<1&&(av.amp>.02||av.walk||av.sit>0||t-lastPose>.045||t<lastPose)){lastPose=t;av.walkPose(t)}   // only a fully idle, standing avatar is refreshed at ~22 Hz
     hips.position.copy(hrest).lerp(hsit,av.sit);if(av.sit>0)for(const s of sb)s.b.quaternion.slerp(s.q,av.sit)}
    if(av.sit>.98)B.Head.quaternion.copy(headQ).multiply(yq.setFromAxisAngle(YA,Math.sin(t*.6+seed)*.3));
-   if(av.wave>0){av.wave-=dt;const k=sg.Right,s=Math.sin(t*11);A(B.RightArm,B.RightForeArm,V(.55*k,.65,.25));A(B.RightForeArm,B.RightHand,V((.2+.5*s)*k,.9,.15))}}};
+   if(av.wave>0){av.wave-=dt;const k=sg.Right,s=Math.sin(t*11);A(B.RightArm,B.RightForeArm,VT(.55*k,.65,.25));A(B.RightForeArm,B.RightHand,VT((.2+.5*s)*k,.9,.15))}}};
  if(seated){sb.forEach(s=>s.b.quaternion.copy(s.q));hips.position.copy(hsit)}
  return av}
 /** Fill the already-taken seats with a varied crowd. Never uses the couple's avatars: 4 different people models (+ any in /models/audience), shared out evenly, each with its own skin, hair, clothes, height and face proportions. */

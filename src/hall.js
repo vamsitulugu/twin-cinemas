@@ -105,7 +105,7 @@ export function buildHall(scene,renderer){
   const sy=y+1.5,sc=new THREE.Group();sc.add(new THREE.Mesh(new THREE.BoxGeometry(.12,.34,.14),dark));for(const dy of[.19,-.19]){const e=new THREE.Mesh(new THREE.BoxGeometry(.08,.025,.1),warm);e.position.y=dy;sc.add(e)}sc.position.set(s*(HALF-.12),sy,z);scene.add(sc);
   for(const up of[1,-1]){const wm=new THREE.MeshBasicMaterial({map:wash,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,opacity:.9});washMats.push(wm);
    const w=new THREE.Mesh(new THREE.PlaneGeometry(.9,1.7),wm);w.position.set(s*(HALF-.015),sy+up*.95,z);w.rotation.y=-s*Math.PI/2;if(up<0)w.rotation.z=Math.PI;scene.add(w)}
-  if(bi%2===0){const l=new THREE.PointLight(0xffb878,.7,6,2);l.position.set(s*(HALF-.8),sy,z);scene.add(l);lamps.push(l)}});
+  });   // (per-sconce point lights removed: the additive wash sprites give the same glow for a fraction of the GPU cost)
  // exit signs, side exit doors, extinguishers
  const exMat=new THREE.MeshBasicMaterial({map:exitTex()});
  const sign=(x,y,z,ry)=>{const m=new THREE.Mesh(new THREE.PlaneGeometry(.6,.3),exMat);m.position.set(x,y,z);m.rotation.y=ry;scene.add(m)};
@@ -133,13 +133,15 @@ export function buildHall(scene,renderer){
  const cushGeo=mergeGeometries([rb(.52,.13,.5,.05,0,.47,-.03),rb(.52,.8,.13,.06,0,.98,.27,.13),rb(.42,.24,.15,.06,0,1.38,.32,.13)]);
  const darkGeo=mergeGeometries([rb(.07,.07,.56,.025,-.3,.66,-.02),rb(.07,.07,.56,.025,.3,.66,-.02),rb(.06,.2,.1,.02,-.3,.54,.2),rb(.06,.2,.1,.02,.3,.54,.2),rb(.12,.42,.24,.03,0,.21,.14),rb(.1,.04,.66,.015,0,.02,0)]);
  const redBase=M(0xa51d1d,{roughness:.9,bumpMap:bumpS,bumpScale:.25}),greyBase=M(0x453e3c,{roughness:.9,bumpMap:bumpS,bumpScale:.25});
- const seats=new Map(),boxes=[],taken=new Set(['A3','A13','B2','B6','B13','C5','C10','C14','D3','D9','D12','E4','E12','F2','F7','F14','G3','G10','H6','H9','H13','I4','I8','I12']),picks=[];
+ const darkParts=[],seats=new Map(),boxes=[],taken=new Set(['A3','A13','B2','B6','B13','C5','C10','C14','D3','D9','D12','E4','E12','F2','F7','F14','G3','G10','H6','H9','H13','I4','I8','I12']),picks=[];
  for(let r=0;r<NROWS;r++)for(let c=0;c<COLS;c++){
   const id=ROWS[r]+(c+1),x=seatX(c),z=rowZ(r),y=floorY(z),g=new THREE.Group(),red=c<3||c>11||r===0||r===NROWS-1,cushMat=(red?redBase:greyBase).clone();
-  const a=new THREE.Mesh(cushGeo,cushMat),b=new THREE.Mesh(darkGeo,dark);for(const m of[a,b]){m.castShadow=m.receiveShadow=true;m.userData.seatId=id;g.add(m);picks.push(m)}
+  const a=new THREE.Mesh(cushGeo,cushMat);a.castShadow=a.receiveShadow=true;a.userData.seatId=id;g.add(a);picks.push(a);darkParts.push(darkGeo.clone().translate(x,y,z));
   g.position.set(x,y,z);scene.add(g);
   seats.set(id,{id,group:g,cushMat,x,z,y,row:r,col:c,pos:new THREE.Vector3(x,y,z),aisle:new THREE.Vector3(x,floorY(z-.55),z-.55)});
   boxes.push({x0:x-.33,x1:x+.33,z0:z-.22,z1:z+.35})}
+
+ {const all=new THREE.Mesh(mergeGeometries(darkParts),dark);all.castShadow=all.receiveShadow=true;scene.add(all);darkParts.forEach(g=>g.dispose())}   // 135 frames, 1 draw call
 
  /* ---------- lobby (outside the door) ---------- */
  const y0=floorY(DOOR_Z),DW=.8,lobby=buildLobby(scene,{y0,DOOR_Z});
