@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {DOOR_Z,HALF,FRONT_Z} from './hall.js';
 const {Vector3}=THREE,cl=(v,a,b)=>Math.max(a,Math.min(b,v));
 /** One camera, many shots. Modes: door, follow, seat, orbit (free 360), screen, couple, full. Every switch is a smooth spring blend. */
 export class CameraRig{
@@ -13,11 +14,11 @@ export class CameraRig{
  get wasTap(){return this.moved<6}
  setMode(m,o={}){this.mode=m;if(o.yaw!==undefined)this.yaw=o.yaw;if(o.pitch!==undefined)this.pitch=o.pitch;if(o.dist!==undefined)this.dist=o.dist}
  pose(t){const c=this.ctx,m=this.mode;this.k=3;
-  if(m==='door'){this.D.set(0,c.lobbyY+1.55,12.4);this.L.set(0,c.lobbyY+1.4,7.4)}
-  else if(m==='screen'){this.D.set(c.couple.x+Math.sin(t*.25)*.12,c.couple.y+2,Math.min(7.1,c.couple.z+1.5));this.L.set(0,3.3,-10);this.k=1.6}
+  if(m==='door'){this.D.set(0,c.lobbyY+1.55,DOOR_Z+4.9);this.L.set(0,c.lobbyY+1.4,DOOR_Z-.1)}
+  else if(m==='screen'){this.D.set(c.couple.x+Math.sin(t*.25)*.12,c.couple.y+2,Math.min(DOOR_Z-.5,c.couple.z+1.5));this.L.set(0,3.4,FRONT_Z);this.k=1.6}
   else if(m==='couple'){this.D.set(c.couple.x+.4,c.couple.y+1.8,c.couple.z-3.6);this.L.set(c.couple.x,c.couple.y+1.05,c.couple.z);this.k=1.8}
-  else if(m==='full'){this.D.set(0,3.4,-4.8);this.L.set(0,3.4,-10.3);this.k=2.5}
+  else if(m==='full'){this.D.set(0,3.4,-4.4);this.L.set(0,3.45,FRONT_Z);this.k=2.5}
   else{const tg=(m==='orbit'?c.couple:c.me),cp=Math.cos(this.pitch);this.L.set(tg.x,tg.y+1.2,tg.z);
    this.D.set(Math.sin(this.yaw)*cp,Math.sin(this.pitch),Math.cos(this.yaw)*cp).multiplyScalar(this.dist).add(this.L);
-   this.D.set(cl(this.D.x,-4.6,4.6),cl(this.D.y,.6,6.6),cl(this.D.z,-9.3,7.25));this.k=9}}
+   this.D.set(cl(this.D.x,-HALF+.4,HALF-.4),cl(this.D.y,.6,6.4),cl(this.D.z,FRONT_Z+1.2,DOOR_Z-.3));this.k=9}}
  update(dt,t){this.pose(t);this.cam.position.lerp(this.D,1-Math.exp(-dt*this.k));this.look.lerp(this.L,1-Math.exp(-dt*Math.min(this.k,4)));this.cam.lookAt(this.look)}}

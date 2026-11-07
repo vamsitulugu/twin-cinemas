@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import {buildHall,floorY} from './hall.js';
+import {buildHall,floorY,DOOR_Z} from './hall.js';
 import {CameraRig} from './camera.js';
 import {Player} from './player.js';
 import {loadAvatars,makeAvatar,seatAudience} from './avatar.js';
@@ -12,16 +12,16 @@ const tween=(ms,f)=>new Promise(r=>{const s=performance.now();(function k(){cons
 /* renderer / scene */
 const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,matchMedia('(pointer:coarse)').matches?1.5:2));renderer.setSize(innerWidth,innerHeight);
 renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.15;document.body.prepend(renderer.domElement);
-const scene=new THREE.Scene();scene.background=new THREE.Color(0x07050c);
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x0a0605);
 const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,.1,80);
 const fit=()=>{camera.aspect=innerWidth/innerHeight;camera.fov=camera.aspect<1?78:55;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)};fit();addEventListener('resize',fit);
 const hall=buildHall(scene,renderer),rig=new CameraRig(camera,renderer.domElement,{onManual:()=>setView('orbit')});
 const movie=new Movie();
 let gl;try{gl=await loadAvatars(p=>$('loading').textContent='LOADING THEATRE… '+Math.round(p*100)+'%')}catch(e){$('loading').textContent='Could not load avatars: '+e.message;throw e}
 const aud=seatAudience(scene,hall,gl);
-const spawn=(kind,h,color,x)=>{const p=new Player(makeAvatar(gl[kind],{height:h,walker:true,hide:kind==='m'?['Wolf3D_Headwear']:[]}),color);scene.add(p.group);p.pos.set(x,floorY(9.4),9.4);p.group.rotation.y=Math.PI;return p};
+const spawn=(kind,h,color,x)=>{const p=new Player(makeAvatar(gl[kind],{height:h,walker:true,hide:kind==='m'?['Wolf3D_Headwear']:[]}),color);scene.add(p.group);p.pos.set(x,floorY(DOOR_Z+1.9),DOOR_Z+1.9);p.group.rotation.y=Math.PI;return p};
 let me=null,partner=null,role=0,sync=null,partnerSeat=null,doorOpen=false;const COL={1:0xff5c8a,2:0x4db2ff},KIND={1:['f',1.68],2:['m',1.8]},LX={1:-.5,2:.5};
-const openDoor=()=>doorOpen?Promise.resolve():(doorOpen=true,tween(800,u=>hall.door.position.x=u*1.4));
+const openDoor=()=>doorOpen?Promise.resolve():(doorOpen=true,tween(800,u=>hall.setDoor(u)));
 const fsOn=()=>document.documentElement.requestFullscreen?.().catch(()=>{}),fsOff=()=>document.fullscreenElement&&document.exitFullscreen();
 /* state machine drives everything */
 let lit=1;const fade=(to,ms)=>{const a=lit;return tween(ms,u=>{lit=a+(to-a)*u;hall.setLights(lit)})};
@@ -39,7 +39,7 @@ function buttons(){bar.innerHTML='';const s=m.state;
  if(view==='full'){bar.innerHTML='';B('✕ Exit full screen',exitFull)}}
 m.on(async(s,p)=>{const ui=$('door-ui'),ov=$('ov');ui.style.display=s===S.DOOR?'flex':'none';ov.style.display='none';
  if(s===S.DOOR){setView('door');tip()}
- if(s===S.ENTER){tip('');await openDoor();setView('follow',{yaw:0,pitch:.55,dist:4});await me.walk([[LX[role],6.2]]);m.go(S.EXPLORE)}
+ if(s===S.ENTER){tip('');await openDoor();setView('follow',{yaw:0,pitch:.55,dist:4});await me.walk([[LX[role],DOOR_Z-1]]);m.go(S.EXPLORE)}
  if(s===S.EXPLORE){tip('WASD / arrows or tap the floor to walk · drag to look · tap a seat');if(p===S.SEATED)setView('follow',{pitch:.55,dist:4})}
  if(s===S.SEATED){setView('seat',{yaw:Math.PI*.15,pitch:.4,dist:3.2});tip(sync?.present?'You are seated. Start when you are both seated.':'You are seated. Start the movie when ready.')}
  if(s===S.WATCH){const first=p===S.SEATED;tip('');if(first){fade(.07,1800);await wait(500);tween(2600,u=>hall.setCurtains(u))}else fade(.07,900);if(!['orbit','full'].includes(view)||p!==S.WATCH)setView('screen')}
@@ -52,7 +52,7 @@ $('open').onclick=()=>{audio.init();audio.door();audio.ambient(.05);m.go(S.ENTER
 const stat=t=>$('dstat').textContent=t||'';
 let lost=null;
 async function partnerSit(id){const seat=hall.seats.get(id);if(!seat||!partner||partnerSeat?.id===id)return;if(mySeat?.id===id){if(role>3-role)lost=id;return}partnerSeat=seat;hall.taken.add(id);hall.setSeatHighlight(id,COL[3-role]);partner.busy=true;buttons();
- if(m.is(S.DOOR,S.ENTER)||partner.pos.z>7.6)partner.snapSit(seat);else{await partner.walk([[partner.pos.x,seat.aisle.z],[seat.aisle.x,seat.aisle.z]]);await partner.sit(seat)}buttons()}
+ if(m.is(S.DOOR,S.ENTER)||partner.pos.z>DOOR_Z+.1)partner.snapSit(seat);else{await partner.walk(hall.route(partner.pos,seat));await partner.sit(seat)}buttons()}
 async function partnerStand(){const s=partnerSeat;if(!s)return;partnerSeat=null;hall.taken.delete(s.id);hall.setSeatHighlight(s.id,0);await partner.stand(s);partner.busy=false;buttons()}
 const snap=()=>({x:me.pos.x,z:me.pos.z,r:me.group.rotation.y,w:me.av.walk?1:0,s:mySeat?.id||null,pc:me.popcorn?1:0});
 async function join(r){if(role)return;role=r;const code=$('room').value.trim()||location.hash.slice(1)||'lobby';history.replaceState(0,'','#'+code);
@@ -61,7 +61,7 @@ async function join(r){if(role)return;role=r;const code=$('room').value.trim()||
  sync=await createSync(code,r,{
   onJoin(){partner.group.visible=true;stat('Your partner is at the door ♥');tip('');buttons()},
   onHello(){sync?.send({t:'pos',...snap()});if(movie.meta)sync?.send({t:'meta',meta:movie.meta})},onMsg,
-  onPos(q){if(!partner.tgt)partner.net(q,true);else partner.net(q);partner.group.visible=true;if(q.z<8.2)openDoor();
+  onPos(q){if(!partner.tgt)partner.net(q,true);else partner.net(q);partner.group.visible=true;if(q.z<DOOR_Z+.7)openDoor();
    if(q.s&&!partnerSeat)partnerSit(q.s);else if(!q.s&&partnerSeat&&!partner.script)partnerStand();if(!!q.pc!==!!partner.popcorn)partner.setPop(!!q.pc)},
   onSit:q=>partnerSit(q.id),onStand:()=>partnerStand(),
   onLeave(){stat('Your partner left');tip('Your partner left the theatre');partner.group.visible=false;if(partnerSeat){hall.taken.delete(partnerSeat.id);hall.setSeatHighlight(partnerSeat.id,0);partnerSeat=null}partner.busy=false;buttons()},
@@ -71,7 +71,7 @@ document.querySelectorAll('#roles button').forEach(b=>b.onclick=()=>join(+b.data
 async function sitDown(){const seat=hall.seats.get(pending);if(!seat)return;const id=pending;pending=null;mySeat=seat;sync?.send({t:'sit',id});buttons();
  await wait(sync?.present?250:0);if(lost===id){mySeat=null;lost=null;hall.setSeatHighlight(id,0);tip('Your partner got that seat first — pick another');buttons();partnerSit(id);return}
 
- await me.walk([[me.pos.x,seat.aisle.z],[seat.aisle.x,seat.aisle.z]]);await me.sit(seat);hall.setSeatHighlight(id,COL[role]);m.go(S.SEATED)}
+ await me.walk(hall.route(me.pos,seat));await me.sit(seat);hall.setSeatHighlight(id,COL[role]);m.go(S.SEATED)}
 async function standUp(){sync?.send({t:'stand'});hall.setSeatHighlight(mySeat.id,0);await me.stand(mySeat);mySeat=null;m.go(S.EXPLORE)}
 /* ---- movie: sync, full screen, seek ---- */
 let applying=false,partnerMeta=null,lastSync=0,fullOn=false;const fv=$('fv'),fc=$('fc');
@@ -124,7 +124,7 @@ renderer.setAnimationLoop(()=>{const dt=Math.min(clock.getDelta(),.05),t=clock.e
   if(!me.move(dx,dz,dt,hall))target&&!(ix||iz)&&dx===0&&(target=null)}
  movie.tick(dt);const now=performance.now();if(role===1&&sync?.present&&m.state===S.WATCH&&now-lastSync>3000){lastSync=now;sync.send({t:'sync',vt:movie.time,pl:movie.playing})}
  if(movie.dur){const v=movie.time/movie.dur*1000;$('sk').value=v;$('fsk').value=v;$('tc').textContent=$('ftc').textContent=fmt(movie.time);$('td').textContent=fmt(movie.dur)}
- aud.forEach(a=>a.update(dt,t));if(me){me.update(dt,t);partner.update(dt,t);rig.ctx.me.copy(me.pos);rig.ctx.couple.copy(me.pos);if(partner.group.visible)rig.ctx.couple.add(partner.pos).multiplyScalar(.5);sync?.tick(performance.now(),me.av.walk,snap)}rig.ctx.lobbyY=floorY(8);
+ aud.forEach(a=>a.update(dt,t));if(me){me.update(dt,t);partner.update(dt,t);rig.ctx.me.copy(me.pos);rig.ctx.couple.copy(me.pos);if(partner.group.visible)rig.ctx.couple.add(partner.pos).multiplyScalar(.5);sync?.tick(performance.now(),me.av.walk,snap)}rig.ctx.lobbyY=floorY(DOOR_Z);
  bubbleTick(now);hall.drawScreen(t,m.is(S.WATCH,S.PAUSED,S.BREAK),movie.dur?movie.time/movie.dur:0);rig.update(dt,t);renderer.render(scene,camera);
  $('dbg').textContent=`${m.state} · cam:${view}`});
 await wait(300);$('loading').classList.add('off');m.go(S.DOOR);setView('door');$('door-ui').style.display='flex';addEventListener('beforeunload',()=>sync?.close());

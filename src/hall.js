@@ -1,80 +1,175 @@
 import * as THREE from 'three';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
+import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
+
+/* ------------------------------------------------------------------
+   Stadium-style cinema (reference: red + grey high-back seats, lit aisle
+   stairs, stepped glowing ceiling frames, wall speakers and sconces).
+   Seats face -z toward the screen. The room rises toward the door (+z).
+------------------------------------------------------------------- */
 const cl=(v,a,b)=>Math.max(a,Math.min(b,v));
-export const ROWS='ABCDE',COLS=8,DOOR_Z=7.5;
-export const rowZ=r=>-1+r*1.5;
-export const floorY=z=>Math.max(0,(Math.min(z,DOOR_Z)+2)*.2);
-export const seatX=c=>c<4?-.65-(3-c)*.75:.65+(c-4)*.75;
-const noise=(rx,ry,s)=>{const c=document.createElement('canvas');c.width=c.height=128;const x=c.getContext('2d'),d=x.createImageData(128,128);for(let i=0;i<d.data.length;i+=4){d.data[i]=d.data[i+1]=d.data[i+2]=120+Math.random()*s;d.data[i+3]=255}x.putImageData(d,0,0);const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(rx,ry);return t};
-function carpetTex(){const c=document.createElement('canvas');c.width=c.height=128;const x=c.getContext('2d');x.fillStyle='#5a1428';x.fillRect(0,0,128,128);x.strokeStyle='#c9a24a';x.lineWidth=2;x.beginPath();x.moveTo(64,6);x.lineTo(122,64);x.lineTo(64,122);x.lineTo(6,64);x.closePath();x.stroke();const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.colorSpace=THREE.SRGBColorSpace;return t}
+const sm=u=>u*u*(3-2*u);
+export const ROWS='ABCDEFGHI',NROWS=9,COLS=15;
+export const PITCH=1.2,RISE=.25,ROW0=-5.2;          // row spacing, step height, z of row A
+export const HALF=6.3,FRONT_Z=-11,DOOR_Z=6.6,AISLE_X=3.5;
+export const rowZ=r=>ROW0+r*PITCH;
+/** floor height: flat stage, then one smooth riser in front of every row, flat walkway at the top */
+export const floorY=z=>{const u=(z-(rowZ(1)-.45))/PITCH;if(u<0)return 0;const i=Math.floor(u),f=u-i;return Math.min(NROWS-1,i+sm(Math.min(1,f/.2)))*RISE};
+/** 3 seats | aisle | 9 seats | aisle | 3 seats */
+export const seatX=c=>c<3?-4.35-(2-c)*.65:c<12?(c-7)*.66:4.35+(c-12)*.65;
+
+const FZ=[3.2,-1.2,-5.6,-9.6],FH=[7.2,6.8,6.4,6.0],FW=[6.1,6.05,6,6],CEIL0=7.7;   // ceiling frames: z, opening height, half width
+const BAY=[4.9,1.0,-3.4,-7.6];                                                    // wall bays (speaker + sconce)
+const SCREEN_Y=3.45,SCREEN_Z=FRONT_Z+.15;
+
+const mkCanvas=(w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;return c};
+const tex=(c,srgb=true)=>{const t=new THREE.CanvasTexture(c);if(srgb)t.colorSpace=THREE.SRGBColorSpace;return t};
+const noise=(rx,ry,s)=>{const c=mkCanvas(128,128),x=c.getContext('2d'),d=x.createImageData(128,128);for(let i=0;i<d.data.length;i+=4){d.data[i]=d.data[i+1]=d.data[i+2]=120+Math.random()*s;d.data[i+3]=255}x.putImageData(d,0,0);const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(rx,ry);return t};
+/** red damask carpet */
+function carpetTex(){const s=256,c=mkCanvas(s,s),x=c.getContext('2d');x.fillStyle='#7d1414';x.fillRect(0,0,s,s);
+ for(let i=0;i<5000;i++){x.fillStyle=`rgba(${Math.random()<.5?255:0},${Math.random()<.5?120:0},60,.05)`;x.fillRect(Math.random()*s,Math.random()*s,2,2)}
+ const motif=(cx,cy,k)=>{x.save();x.translate(cx,cy);x.scale(k,k);x.strokeStyle='rgba(222,84,62,.5)';x.fillStyle='rgba(222,84,62,.38)';x.lineWidth=3;
+  for(const a of[0,Math.PI/2,Math.PI/4,-Math.PI/4]){x.beginPath();x.ellipse(0,0,44,11,a,0,Math.PI*2);x.stroke()}
+  x.beginPath();x.arc(0,0,7,0,Math.PI*2);x.fill();x.restore()};
+ motif(64,64,1);motif(192,192,1);motif(192,64,.55);motif(64,192,.55);
+ const t=tex(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=8;return t}
+function exitTex(){const c=mkCanvas(128,64),x=c.getContext('2d');x.fillStyle='#14b84b';x.fillRect(0,0,128,64);x.strokeStyle=x.fillStyle='#fff';x.lineWidth=5;x.lineCap=x.lineJoin='round';
+ x.beginPath();x.moveTo(12,32);x.lineTo(34,14);x.lineTo(34,25);x.lineTo(54,25);x.lineTo(54,39);x.lineTo(34,39);x.lineTo(34,50);x.closePath();x.fill();
+ x.beginPath();x.arc(84,16,6,0,Math.PI*2);x.fill();x.beginPath();x.moveTo(84,24);x.lineTo(80,42);x.moveTo(72,30);x.lineTo(92,27);x.moveTo(80,42);x.lineTo(71,55);x.moveTo(80,42);x.lineTo(91,52);x.stroke();
+ x.lineWidth=3;x.strokeRect(104,12,16,40);return tex(c)}
+const letterTex=ch=>{const c=mkCanvas(128,128),x=c.getContext('2d');x.fillStyle='#e0301e';x.font='bold 104px system-ui,Arial';x.textAlign='center';x.textBaseline='middle';x.fillText(ch,64,70);return tex(c)};
+const washTex=()=>{const c=mkCanvas(64,128),x=c.getContext('2d');x.scale(1,2);const g=x.createRadialGradient(32,64,0,32,64,32);g.addColorStop(0,'rgba(255,196,140,.85)');g.addColorStop(1,'rgba(255,170,110,0)');x.fillStyle=g;x.fillRect(0,0,64,64);return tex(c)};
+
+/** rounded-rectangle "U" outline (open at the bottom), as [x,y] points */
+function uPts(W,H,R,y0,step=.25){const p=[],n=10;for(let y=y0;y<H-R;y+=step)p.push([-W,y]);
+ for(let k=0;k<=n;k++){const a=Math.PI-k/n*Math.PI/2;p.push([-W+R+Math.cos(a)*R,H-R+Math.sin(a)*R])}
+ for(let x=-W+R+step;x<W-R;x+=step)p.push([x,H]);
+ for(let k=0;k<=n;k++){const a=Math.PI/2-k/n*Math.PI/2;p.push([W-R+Math.cos(a)*R,H-R+Math.sin(a)*R])}
+ for(let y=H-R-step;y>=y0;y-=step)p.push([W,y]);return p}
 
 export function buildHall(scene,renderer){
  const M=(c,o)=>new THREE.MeshStandardMaterial({color:c,roughness:.8,metalness:.05,...o});
- const bumpS=noise(3,3,135),bumpW=noise(40,25,135);
+ const bumpW=noise(40,25,135),bumpS=noise(3,3,135);
  const add=(m,x,y,z,p=scene)=>{m.position.set(x,y,z);m.castShadow=m.receiveShadow=true;p.add(m);return m};
  const box=(w,h,d,mat,x,y,z,p)=>add(new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat),x,y,z,p);
- // environment reflections
- const pm=new THREE.PMREMGenerator(renderer);scene.environment=pm.fromScene(new RoomEnvironment(),.04).texture;scene.environmentIntensity=.35;
- // shell
- const wall=M(0x3a1224,{side:THREE.BackSide,roughness:.95,bumpMap:bumpW,bumpScale:.7}),ceil=M(0x120d1a,{side:THREE.BackSide});
- const shell=new THREE.Mesh(new THREE.BoxGeometry(10,7,18.1),[wall,wall,ceil,ceil,wall,wall]);shell.position.set(0,3.5,-1.55);scene.add(shell);
- // floors
- const ct=carpetTex();ct.repeat.set(6,10);const ang=Math.atan(.2),len=Math.hypot(9.5,1.9);
- const ramp=new THREE.Mesh(new THREE.PlaneGeometry(10,len),M(0xffffff,{map:ct,roughness:.95}));ramp.rotation.x=-Math.PI/2-ang;ramp.position.set(0,.95,2.75);ramp.receiveShadow=true;scene.add(ramp);
- const ft=ct.clone();ft.repeat.set(6,5);const flat=new THREE.Mesh(new THREE.PlaneGeometry(10,8.6),M(0xffffff,{map:ft,roughness:.95}));flat.rotation.x=-Math.PI/2;flat.position.set(0,.001,-6.3);flat.receiveShadow=true;scene.add(flat);
- box(9.8,.25,1.3,M(0x1a1220),0,.125,-9.85);
- // wall panels + sconces
- const panel=M(0x5a1830,{bumpMap:bumpS,bumpScale:.8,roughness:.95}),glowMats=[],lamps=[];
- for(const s of[-1,1])for(let i=0;i<7;i++){const z=-8.5+i*2.4;box(.15,3.4,1.1,panel,s*4.92,3.7,z);
-  const gm=M(0x221a10,{emissive:0xffc98a,emissiveIntensity:1});glowMats.push(gm);box(.08,.5,.18,gm,s*4.82,3.4,z+1.2).castShadow=false;
-  if(i%2===0){const l=new THREE.PointLight(0xffb878,.7,6,2);l.position.set(s*4.3,3.4,z+1.2);scene.add(l);lamps.push(l)}}
- const strip=M(0x222222,{emissive:0xffe2b0,emissiveIntensity:1});[-2.5,0,2.5].forEach(x=>box(.25,.05,15,strip,x,6.95,-1.5).castShadow=false);
- // aisle step lights
- const step=M(0x221100,{emissive:0xff9a40,emissiveIntensity:1.3});for(let r=0;r<5;r++)[-.2,.2].forEach(x=>box(.06,.04,.16,step,x,floorY(rowZ(r)-.5)+.03,rowZ(r)-.5).castShadow=false);
- // lights
- const hemi=new THREE.HemisphereLight(0xffd9b0,0x2a1030,.6);scene.add(hemi);
- const spot=new THREE.SpotLight(0xffe2bf,60,30,1.1,.6,1);spot.position.set(0,6.8,2);spot.target.position.set(0,0,0);spot.castShadow=true;spot.shadow.mapSize.set(1024,1024);spot.shadow.bias=-.0005;scene.add(spot,spot.target);
- const glow=new THREE.PointLight(0xaab8ff,0,24,1.4);glow.position.set(0,3.4,-8);scene.add(glow);
- // screen + curtains
- const cvs=document.createElement('canvas');cvs.width=1024;cvs.height=512;const cx=cvs.getContext('2d');const tex=new THREE.CanvasTexture(cvs);tex.colorSpace=THREE.SRGBColorSpace;
- const screenMat=new THREE.MeshBasicMaterial({map:tex,toneMapped:false});
- const screen=new THREE.Group();screen.position.set(0,3.4,-10.3);scene.add(screen);
- const SIZES={std:[8,3.6,0],imax:[9.4,5,0],curved:[8.8,3.8,.7],mini:[5,2.8,0]};
- const plane=(w,h,c,m,z)=>{const g=new THREE.PlaneGeometry(w,h,40,1),p=g.attributes.position;for(let i=0;i<p.count;i++)p.setZ(i,c?Math.pow(p.getX(i)/4.4,2)*c:0);g.computeVertexNormals();const k=new THREE.Mesh(g,m);k.position.z=z;return k};
- let kind='std';const setScreen=(k,asp)=>{kind=k;let[w,h,c]=SIZES[k];if(asp){h=Math.min(4.4,9/asp);w=h*asp}screen.clear();screen.add(plane(w+.5,h+.5,c,new THREE.MeshBasicMaterial({color:0x050505}),-.06),plane(w,h,c,screenMat,0))};setScreen('std');
- const cg=new THREE.PlaneGeometry(4.9,6.6,48,1),cp=cg.attributes.position;for(let i=0;i<cp.count;i++)cp.setZ(i,Math.sin(cp.getX(i)*14)*.1);cg.computeVertexNormals();
- const cm=M(0x9a1c3c,{roughness:.9,side:THREE.DoubleSide});
- const cL=new THREE.Group(),cR=new THREE.Group();cL.position.set(-4.95,3.4,-9.4);cR.position.set(4.95,3.4,-9.4);
- const m1=new THREE.Mesh(cg,cm),m2=new THREE.Mesh(cg,cm);m1.position.x=2.45;m2.position.x=-2.45;m1.castShadow=m2.castShadow=true;cL.add(m1);cR.add(m2);scene.add(cL,cR);
- // projector
- box(.7,.4,.9,M(0x111111),0,6.4,6.9);
- // seats
- const seats=new Map(),boxes=[],taken=new Set(['A3','B6','C1','C5','D4','D7','E2','E8']);
- const red=M(0x7a1228,{roughness:.88,bumpMap:bumpS,bumpScale:.7}),dark=M(0x1a1220);
- for(let r=0;r<5;r++)for(let c=0;c<COLS;c++){const id=ROWS[r]+(c+1),x=seatX(c),z=rowZ(r),y=floorY(z),g=new THREE.Group(),cushMat=red.clone();
-  const part=(geo,mat,px,py,pz,rx=0)=>{const m=new THREE.Mesh(geo,mat);m.position.set(px,py,pz);m.rotation.x=rx;m.castShadow=m.receiveShadow=true;m.userData.seatId=id;g.add(m);return m};
-  part(new RoundedBoxGeometry(.56,.14,.5,3,.05),cushMat,0,.45,-.02);part(new RoundedBoxGeometry(.56,.76,.12,3,.05),red,0,.9,.27,.14);
-  part(new RoundedBoxGeometry(.09,.1,.5,2,.03),dark,-.33,.62,0);part(new RoundedBoxGeometry(.09,.1,.5,2,.03),dark,.33,.62,0);part(new THREE.BoxGeometry(.12,.4,.3),dark,0,.2,.1);
-  g.position.set(x,y,z);scene.add(g);seats.set(id,{id,group:g,cushMat,x,z,y,row:r,col:c,pos:new THREE.Vector3(x,y,z),aisle:new THREE.Vector3(x,floorY(z-.75),z-.75)});
-  boxes.push({x0:x-.32,x1:x+.32,z0:z-.2,z1:z+.35})}
- // lobby (outside the door): wall with doorway, floor, light, sign
- const y0=floorY(DOOR_Z),sh=new THREE.Shape();sh.moveTo(-9,0);sh.lineTo(9,0);sh.lineTo(9,9);sh.lineTo(-9,9);sh.closePath();
- const hole=new THREE.Path();hole.moveTo(-.65,y0);hole.lineTo(.65,y0);hole.lineTo(.65,y0+2.4);hole.lineTo(-.65,y0+2.4);hole.closePath();sh.holes.push(hole);
- const lw=new THREE.Mesh(new THREE.ShapeGeometry(sh),M(0x2a1020,{bumpMap:bumpW,bumpScale:.5}));lw.position.z=DOOR_Z+.02;scene.add(lw);
- const lf=new THREE.Mesh(new THREE.PlaneGeometry(18,10),M(0x1c1018,{roughness:.5}));lf.rotation.x=-Math.PI/2;lf.position.set(0,y0,12);lf.receiveShadow=true;scene.add(lf);
- const ll=new THREE.PointLight(0xffc890,40,16,1.6);ll.position.set(0,y0+3.2,10);scene.add(ll);
- const sc=document.createElement('canvas');sc.width=512;sc.height=96;const sx=sc.getContext('2d');sx.fillStyle='#fff';sx.shadowColor='#ff5c8a';sx.shadowBlur=18;sx.font='bold 52px system-ui';sx.textAlign='center';sx.fillText('TWIN CINEMA',256,66);
- const sign=new THREE.Mesh(new THREE.PlaneGeometry(3.2,.6),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(sc),transparent:true}));sign.position.set(0,y0+3.3,DOOR_Z+.06);scene.add(sign);
- const door=box(1.3,2.4,.08,M(0x3a2414),0,y0+1.2,7.36);box(.7,.22,.06,new THREE.MeshBasicMaterial({color:0x3dff7a}),0,y0+2.95,7.45);
- const picks=[...seats.values()].flatMap(s=>s.group.children);
- return{seats,taken,door,screen,cL,cR,picks,floors:[ramp,flat],setScreen,fitScreen:a=>setScreen(kind,a),setScreenMap(t){screenMat.map=t||tex;screenMat.needsUpdate=true},sizes:Object.keys(SIZES),
+ const noShadow=m=>{m.castShadow=false;return m};
+ try{const pm=new THREE.PMREMGenerator(renderer);scene.environment=pm.fromScene(new RoomEnvironment(),.04).texture;scene.environmentIntensity=.35}catch(e){}
+
+ /* ---------- materials ---------- */
+ const warm=M(0x221a10,{emissive:0xffc98a,emissiveIntensity:1});                    // every glowing line / sconce
+ const stepMat=M(0x221100,{emissive:0xffa24a,emissiveIntensity:1.3});                // lit aisle steps
+ const wall=M(0x80615a,{side:THREE.BackSide,roughness:.95,bumpMap:bumpW,bumpScale:.7});
+ const backWall=M(0x634842,{side:THREE.BackSide,roughness:.95,bumpMap:bumpW,bumpScale:.6});
+ const frontWall=M(0x9a6f63,{side:THREE.BackSide,roughness:.95,bumpMap:bumpW,bumpScale:.5});
+ const ceilMat=M(0x3a2623,{roughness:.9}),slabMat=M(0x2b1d1a,{roughness:.9}),deck=M(0x4a3a35,{roughness:.9,bumpMap:bumpS,bumpScale:.4}),panelMat=M(0x8f675d,{roughness:.95,bumpMap:bumpS,bumpScale:.5}),
+  dark=M(0x2a211f,{roughness:.55,metalness:.15}),metal=M(0x6e625e,{roughness:.4,metalness:.5});
+
+ /* ---------- shell ---------- */
+ const D=DOOR_Z-FRONT_Z,CZ=(DOOR_Z+FRONT_Z)/2;
+ const shell=new THREE.Mesh(new THREE.BoxGeometry(HALF*2,CEIL0+.1,D),[wall,wall,ceilMat,ceilMat,backWall,frontWall]);shell.position.set(0,(CEIL0+.1)/2,CZ);scene.add(shell);
+
+ /* ---------- floors: red carpet stage + stepped rows ---------- */
+ const ct=carpetTex(),fz1=rowZ(1)-.325,fl=fz1-FRONT_Z;ct.repeat.set(HALF*2/2.4,fl/2.4);
+ const flat=new THREE.Mesh(new THREE.PlaneGeometry(HALF*2,fl),M(0xffffff,{map:ct,roughness:.95}));flat.rotation.x=-Math.PI/2;flat.position.set(0,.001,(FRONT_Z+fz1)/2);flat.receiveShadow=true;scene.add(flat);
+ const treads=[];
+ for(let r=1;r<NROWS;r++){const z0=rowZ(r)-.325,z1=r<NROWS-1?rowZ(r+1)-.325:DOOR_Z,h=r*RISE;treads.push(box(HALF*2-.02,h,z1-z0,deck,0,h/2,(z0+z1)/2))}
+ // lit aisle steps + row letters
+ const lt=[...ROWS].map(letterTex);
+ for(const s of[-1,1])for(let r=0;r<NROWS;r++){const h=r*RISE;
+  if(r>0)noShadow(box(1,.04,.05,stepMat,s*AISLE_X,h-.015,rowZ(r)-.335));
+  const l=new THREE.Mesh(new THREE.PlaneGeometry(.42,.42),new THREE.MeshBasicMaterial({map:lt[r],transparent:true,depthWrite:false}));l.rotation.x=-Math.PI/2;l.position.set(s*AISLE_X,h+.006,rowZ(r)+.02);scene.add(l)}
+
+ /* ---------- stepped ceiling, glowing frames ---------- */
+ const zones=[[DOOR_Z,FZ[0]+.25,CEIL0],[FZ[0]-.25,FZ[1]+.25,FH[0]],[FZ[1]-.25,FZ[2]+.25,FH[1]],[FZ[2]-.25,FZ[3]+.25,FH[2]],[FZ[3]-.25,FRONT_Z,FH[3]]];
+ const dlPos=[],bayLights=[];
+ zones.forEach(([za,zb,y],i)=>{const len=za-zb,p=new THREE.Mesh(new THREE.PlaneGeometry(HALF*2,len),ceilMat);p.rotation.x=Math.PI/2;p.position.set(0,y-.002,(za+zb)/2);p.receiveShadow=true;scene.add(p);
+  for(let z=za-.7;z>zb+.3;z-=1.3)for(let x=-4.5;x<=4.6;x+=1.5)dlPos.push([x,y-.01,z]);
+  if(len>1.5)for(const s of[-1,1]){const g=new THREE.Group();g.add(new THREE.Mesh(new THREE.BoxGeometry(.9,.05,.9),M(0x17110f,{roughness:.6})));const in_=new THREE.Mesh(new THREE.BoxGeometry(.66,.02,.66),M(0x2c2220,{roughness:.5}));in_.position.y=-.02;g.add(in_);g.position.set(s*2.4,y-.03,(za+zb)/2);scene.add(g)}
+  if(len>1.5){const l=new THREE.PointLight(0xffb070,9,9,1.6);l.position.set(0,y-.9,(za+zb)/2);scene.add(l);bayLights.push(l)}});
+ const dlMat=new THREE.MeshBasicMaterial({color:0xfff1d6}),dlGeo=new THREE.CircleGeometry(.07,10).rotateX(Math.PI/2),dl=new THREE.InstancedMesh(dlGeo,dlMat,dlPos.length),mx=new THREE.Matrix4();
+ dlPos.forEach((p,i)=>{mx.setPosition(p[0],p[1],p[2]);dl.setMatrixAt(i,mx)});dl.frustumCulled=false;scene.add(dl);
+ FZ.forEach((z,i)=>{const W=FW[i],H=FH[i],R=1.4,top=i?FH[i-1]:CEIL0;
+  const sh=new THREE.Shape();sh.moveTo(-HALF-.2,-1.5);sh.lineTo(HALF+.2,-1.5);sh.lineTo(HALF+.2,top);sh.lineTo(-HALF-.2,top);sh.closePath();
+  const hole=new THREE.Path();hole.moveTo(-W,-.5);hole.lineTo(W,-.5);hole.lineTo(W,H-R);hole.absarc(W-R,H-R,R,0,Math.PI/2,false);hole.lineTo(-W+R,H);hole.absarc(-W+R,H-R,R,Math.PI/2,Math.PI,false);hole.lineTo(-W,-.5);sh.holes.push(hole);
+  const slab=new THREE.Mesh(new THREE.ExtrudeGeometry(sh,{depth:.5,bevelEnabled:false,curveSegments:14}),slabMat);slab.position.z=z-.25;slab.receiveShadow=true;scene.add(slab);
+  const pts=uPts(W-.12,H-.12,R,floorY(z)+.1).map(p=>new THREE.Vector3(p[0],p[1],0)),tube=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts,false,'centripetal'),pts.length*2,.035,6),warm);tube.position.z=z+.27;scene.add(tube)});
+
+ /* ---------- walls: panels, speakers, sconces ---------- */
+ const wash=washTex(),washMats=[],lamps=[];
+ for(const s of[-1,1])BAY.forEach((z,bi)=>{const y=floorY(z)+2.3,x=s*(HALF-.02);
+  const pn=box(.08,3.8,1.9,panelMat,s*(HALF-.05),y+.9,z);
+  const sp=new THREE.Group();sp.add(new THREE.Mesh(new THREE.BoxGeometry(.22,.56,.4),dark));for(const dy of[.12,-.12]){const c=new THREE.Mesh(new THREE.CylinderGeometry(.09,.09,.04,16),M(0x120d0c,{roughness:.9}));c.rotation.z=Math.PI/2;c.position.set(-s*.12,dy,0);sp.add(c)}sp.position.set(s*(HALF-.2),y,z);sp.children.forEach(k=>k.castShadow=true);scene.add(sp);
+  const sy=y+1.5,sc=new THREE.Group();sc.add(new THREE.Mesh(new THREE.BoxGeometry(.12,.34,.14),dark));for(const dy of[.19,-.19]){const e=new THREE.Mesh(new THREE.BoxGeometry(.08,.025,.1),warm);e.position.y=dy;sc.add(e)}sc.position.set(s*(HALF-.12),sy,z);scene.add(sc);
+  for(const up of[1,-1]){const wm=new THREE.MeshBasicMaterial({map:wash,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,opacity:.9});washMats.push(wm);
+   const w=new THREE.Mesh(new THREE.PlaneGeometry(.9,1.7),wm);w.position.set(s*(HALF-.015),sy+up*.95,z);w.rotation.y=-s*Math.PI/2;if(up<0)w.rotation.z=Math.PI;scene.add(w)}
+  if(bi%2===0){const l=new THREE.PointLight(0xffb878,.7,6,2);l.position.set(s*(HALF-.8),sy,z);scene.add(l);lamps.push(l)}});
+ // exit signs, side exit doors, extinguishers
+ const exMat=new THREE.MeshBasicMaterial({map:exitTex()});
+ const sign=(x,y,z,ry)=>{const m=new THREE.Mesh(new THREE.PlaneGeometry(.6,.3),exMat);m.position.set(x,y,z);m.rotation.y=ry;scene.add(m)};
+ sign(-HALF+.02,floorY(-8.8)+2.9,-8.8,Math.PI/2);sign(HALF-.02,floorY(4.2)+2.7,4.2,-Math.PI/2);
+ for(const s of[-1,1]){box(.08,2.1,1,M(0x6f625d,{roughness:.6,metalness:.2}),s*(HALF-.05),1.05,-10.4);
+  const e=new THREE.Group(),top=new THREE.Mesh(new THREE.CylinderGeometry(.03,.03,.1,8),dark);top.position.y=.23;e.add(new THREE.Mesh(new THREE.CylinderGeometry(.08,.08,.36,12),M(0xd02222,{roughness:.4})),top);e.position.set(s*(HALF-.12),1.2,-9.1);scene.add(e);
+  sign(s*(HALF-.02),2.45,-10.4,-s*Math.PI/2)}
+
+ /* ---------- lights ---------- */
+ const hemi=new THREE.HemisphereLight(0xffe0c8,0x2e1a16,.7);scene.add(hemi);
+ const spot=new THREE.SpotLight(0xffe2bf,60,32,1.1,.6,1);spot.position.set(0,6.9,1.2);spot.target.position.set(0,1,0);spot.castShadow=true;spot.shadow.mapSize.set(1024,1024);spot.shadow.bias=-.0005;scene.add(spot,spot.target);
+ const glow=new THREE.PointLight(0xffe0cc,0,26,1.4);glow.position.set(0,3.5,SCREEN_Z+2);scene.add(glow);
+
+ /* ---------- screen ---------- */
+ const SW=1280,SH=560,cvs=mkCanvas(SW,SH),cx=cvs.getContext('2d'),stex=new THREE.CanvasTexture(cvs);stex.colorSpace=THREE.SRGBColorSpace;
+ const screenMat=new THREE.MeshBasicMaterial({map:stex,toneMapped:false}),screen=new THREE.Group();screen.position.set(0,SCREEN_Y,SCREEN_Z);scene.add(screen);
+ const SIZES={std:[9.6,4.2,0],imax:[10.6,5,0],curved:[10.2,4.4,.7],mini:[6,3.2,0]};
+ const plane=(w,h,c,m,z)=>{const g=new THREE.PlaneGeometry(w,h,40,1),p=g.attributes.position;for(let i=0;i<p.count;i++)p.setZ(i,c?Math.pow(p.getX(i)/5,2)*c:0);g.computeVertexNormals();const k=new THREE.Mesh(g,m);k.position.z=z;return k};
+ let kind='std';const setScreen=(k,asp)=>{kind=k;let[w,h,c]=SIZES[k];if(asp){h=Math.min(4.6,10.2/asp);w=h*asp}screen.clear();screen.add(plane(w+.2,h+.2,c,new THREE.MeshBasicMaterial({color:0x1a0f0d}),-.04),plane(w,h,c,screenMat,0))};setScreen('std');
+ // curtains are gone in this theatre; the groups stay so the open/close animation is a harmless no-op
+ const cL=new THREE.Group(),cR=new THREE.Group();
+
+ /* ---------- seats ---------- */
+ const rb=(w,h,d,r,x,y,z,rx=0)=>{const g=new RoundedBoxGeometry(w,h,d,3,r);if(rx)g.rotateX(rx);g.translate(x,y,z);return g};
+ const cushGeo=mergeGeometries([rb(.52,.13,.5,.05,0,.47,-.03),rb(.52,.8,.13,.06,0,.98,.27,.13),rb(.42,.24,.15,.06,0,1.38,.32,.13)]);
+ const darkGeo=mergeGeometries([rb(.07,.07,.56,.025,-.3,.66,-.02),rb(.07,.07,.56,.025,.3,.66,-.02),rb(.06,.2,.1,.02,-.3,.54,.2),rb(.06,.2,.1,.02,.3,.54,.2),rb(.12,.42,.24,.03,0,.21,.14),rb(.1,.04,.66,.015,0,.02,0)]);
+ const redBase=M(0xa51d1d,{roughness:.9,bumpMap:bumpS,bumpScale:.25}),greyBase=M(0x453e3c,{roughness:.9,bumpMap:bumpS,bumpScale:.25});
+ const seats=new Map(),boxes=[],taken=new Set(['B13','C5','D9','E4','E12','F7','G3','G10','H6','H13']),picks=[];
+ for(let r=0;r<NROWS;r++)for(let c=0;c<COLS;c++){
+  const id=ROWS[r]+(c+1),x=seatX(c),z=rowZ(r),y=floorY(z),g=new THREE.Group(),red=c<3||c>11||r===0||r===NROWS-1,cushMat=(red?redBase:greyBase).clone();
+  const a=new THREE.Mesh(cushGeo,cushMat),b=new THREE.Mesh(darkGeo,dark);for(const m of[a,b]){m.castShadow=m.receiveShadow=true;m.userData.seatId=id;g.add(m);picks.push(m)}
+  g.position.set(x,y,z);scene.add(g);
+  seats.set(id,{id,group:g,cushMat,x,z,y,row:r,col:c,pos:new THREE.Vector3(x,y,z),aisle:new THREE.Vector3(x,floorY(z-.55),z-.55)});
+  boxes.push({x0:x-.33,x1:x+.33,z0:z-.22,z1:z+.35})}
+
+ /* ---------- lobby (outside the door) ---------- */
+ const y0=floorY(DOOR_Z),DW=.8,lsh=new THREE.Shape();lsh.moveTo(-9,0);lsh.lineTo(9,0);lsh.lineTo(9,9);lsh.lineTo(-9,9);lsh.closePath();
+ const lh=new THREE.Path();lh.moveTo(-DW,y0);lh.lineTo(DW,y0);lh.lineTo(DW,y0+2.4);lh.lineTo(-DW,y0+2.4);lh.closePath();lsh.holes.push(lh);
+ const lw=new THREE.Mesh(new THREE.ShapeGeometry(lsh),M(0x4a2f2b,{bumpMap:bumpW,bumpScale:.5}));lw.position.z=DOOR_Z+.02;scene.add(lw);
+ const lf=new THREE.Mesh(new THREE.PlaneGeometry(18,10),M(0x2e1e1b,{roughness:.5}));lf.rotation.x=-Math.PI/2;lf.position.set(0,y0,DOOR_Z+5);lf.receiveShadow=true;scene.add(lf);
+ const ll=new THREE.PointLight(0xffc090,40,16,1.6);ll.position.set(0,y0+3.2,DOOR_Z+3);scene.add(ll);
+ const sc=mkCanvas(512,96),sx=sc.getContext('2d');sx.fillStyle='#fff3e6';sx.shadowColor='#ff6a4a';sx.shadowBlur=18;sx.font='bold 52px system-ui';sx.textAlign='center';sx.fillText('TWIN CINEMA',256,66);
+ const lsign=new THREE.Mesh(new THREE.PlaneGeometry(3.2,.6),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(sc),transparent:true}));lsign.position.set(0,y0+3.3,DOOR_Z+.06);scene.add(lsign);
+ // double door (two leaves that slide apart)
+ const doorMat=M(0xb7a595,{roughness:.6}),door=new THREE.Group(),leaves=[-1,1].map(s=>{const l=new THREE.Group();l.add(new THREE.Mesh(new THREE.BoxGeometry(DW,2.4,.07),doorMat));const pn=new THREE.Mesh(new THREE.BoxGeometry(DW-.2,1.9,.02),M(0xcdbcab,{roughness:.6}));pn.position.z=-.04;l.add(pn);
+  const bar=new THREE.Mesh(new THREE.BoxGeometry(.04,.04,.5),metal);bar.rotation.y=Math.PI/2;bar.position.set(-s*.2,0,-.07);bar.scale.set(1,1,1);l.add(bar);l.position.x=s*DW/2;l.children.forEach(k=>k.castShadow=true);door.add(l);return l});
+ door.position.set(0,y0+1.2,DOOR_Z-.06);scene.add(door);
+ box(.7,.22,.06,new THREE.MeshBasicMaterial({color:0x3dff7a}),0,y0+2.95,DOOR_Z+.1);
+ sign(0,y0+2.75,DOOR_Z-.03,Math.PI);
+
+ const api={seats,taken,door,screen,cL,cR,picks,floors:[flat,...treads],setScreen,fitScreen:a=>setScreen(kind,a),setScreenMap(t){screenMat.map=t||stex;screenMat.needsUpdate=true},sizes:Object.keys(SIZES),
+  setDoor(u){leaves[0].position.x=-DW/2-u*DW*.95;leaves[1].position.x=DW/2+u*DW*.95},
   /** house=1 full lights, 0.07 movie dark */
-  setLights(v){hemi.intensity=.06+.54*v;spot.intensity=60*v;lamps.forEach(l=>l.intensity=.7*v);glowMats.forEach(m=>m.emissiveIntensity=v);strip.emissiveIntensity=v;scene.environmentIntensity=.05+.3*v;glow.intensity=3*(1-v)},
+  setLights(v){hemi.intensity=.06+.64*v;spot.intensity=60*v;lamps.forEach(l=>l.intensity=.7*v);bayLights.forEach(l=>l.intensity=9*v);warm.emissiveIntensity=.12+.88*v;washMats.forEach(m=>m.opacity=.1+.8*v);
+   stepMat.emissiveIntensity=.5+.8*v;dlMat.color.setScalar(.2+.8*v);scene.environmentIntensity=.05+.3*v;glow.intensity=6*(1-v)},
   setCurtains(o){cL.scale.x=cR.scale.x=1-.93*o},
   setSeatHighlight(id,hex){const s=seats.get(id);if(s){s.cushMat.emissive.setHex(hex||0);s.cushMat.emissiveIntensity=hex?.7:1}},
-  drawScreen(t,playing,prog=0){cx.fillStyle='#120a22';cx.fillRect(0,0,1024,512);const g=cx.createRadialGradient(512,256,20,512,256,520);g.addColorStop(0,playing?'#5a2a7a':'#2a1642');g.addColorStop(1,'#0b0618');cx.fillStyle=g;cx.fillRect(0,0,1024,512);
-   cx.textAlign='center';cx.fillStyle='#fff';cx.shadowColor='#ff5c8a';cx.shadowBlur=30;cx.font='bold 70px system-ui';cx.fillText('TWIN CINEMA',512,240);cx.shadowBlur=0;cx.font='28px system-ui';cx.fillStyle='#cdbfe8';
-   cx.fillText(playing?'▶ Demo movie · choose a video file for the real thing':'Choose your seats ♥',512,300);if(playing||prog>0){cx.fillStyle='#fff3';cx.fillRect(112,450,800,6);cx.fillStyle='#ff5c8a';cx.fillRect(112,450,800*prog,6)}cx.fillStyle='#ff5c8a';cx.fillStyle='#ff5c8a';cx.font='40px serif';cx.fillText('♥',512+Math.sin(t*2)*60,380+Math.cos(t*3)*8);tex.needsUpdate=true},
+  drawScreen(t,playing,prog=0){const g=cx.createRadialGradient(SW/2,SH/2,30,SW/2,SH/2,SW*.62);
+   if(playing){g.addColorStop(0,'#4a2226');g.addColorStop(1,'#120708')}else{g.addColorStop(0,'#fff3ea');g.addColorStop(1,'#f1cdbb')}
+   cx.fillStyle=g;cx.fillRect(0,0,SW,SH);cx.textAlign='center';
+   cx.shadowColor=playing?'#ff6a4a':'transparent';cx.shadowBlur=playing?30:0;cx.fillStyle=playing?'#fff':'#8a3a32';cx.font='bold 84px system-ui';cx.fillText('TWIN CINEMA',SW/2,270);
+   cx.shadowBlur=0;cx.font='30px system-ui';cx.fillStyle=playing?'#e8c9c0':'#a8625a';cx.fillText(playing?'▶ Demo movie · choose a video file for the real thing':'Choose your seats ♥',SW/2,336);
+   if(playing||prog>0){cx.fillStyle=playing?'#fff3':'#8a3a3233';cx.fillRect(140,500,1000,6);cx.fillStyle='#ff6a4a';cx.fillRect(140,500,1000*prog,6)}
+   cx.fillStyle='#e0504a';cx.font='40px serif';cx.fillText('♥',SW/2+Math.sin(t*2)*70,420+Math.cos(t*3)*8);stex.needsUpdate=true},
+  /** walking route to a seat: sideways to the nearest aisle, along the aisle, then along the row gap */
+  route(p,seat){const side=Math.abs(seat.x)>.35?Math.sign(seat.x):(p.x<0?-1:1),ax=side*AISLE_X,pts=[];if(Math.abs(p.x-ax)>.3)pts.push([ax,p.z]);pts.push([ax,seat.aisle.z],[seat.x,seat.aisle.z]);return pts},
   /** keep a point (radius r) inside the hall and out of seat blocks */
-  resolve(p,r=.25,zMax=7.2){p.x=cl(p.x,-4.4,4.4);p.z=cl(p.z,-9,zMax);for(const b of boxes){const cx2=cl(p.x,b.x0,b.x1),cz=cl(p.z,b.z0,b.z1),dx=p.x-cx2,dz=p.z-cz,d=Math.hypot(dx,dz);if(d<r){if(d>1e-4){p.x=cx2+dx/d*r;p.z=cz+dz/d*r}else p.z=b.z0-r}}}}}
+  resolve(p,r=.25,zMax=DOOR_Z-.4){p.x=cl(p.x,-HALF+.3,HALF-.3);p.z=cl(p.z,FRONT_Z+1,zMax);for(const b of boxes){const cx2=cl(p.x,b.x0,b.x1),cz=cl(p.z,b.z0,b.z1),dx=p.x-cx2,dz=p.z-cz,d=Math.hypot(dx,dz);if(d<r){if(d>1e-4){p.x=cx2+dx/d*r;p.z=cz+dz/d*r}else p.z=b.z0-r}}}};
+ return api}
