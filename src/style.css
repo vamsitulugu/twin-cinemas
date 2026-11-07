@@ -183,3 +183,5 @@ body.pl #bagbtn{top:calc(max(8px,env(safe-area-inset-top)) + 54px);transition:op
 #inv button:disabled{opacity:.5;cursor:default}
 #inv .inv-b{color:var(--mute);font-size:14px;padding:10px 6px;text-decoration:none}
 body.app #dstat{display:none}
+
+#inv label.pick{background:#ffffff18;color:#fff;border:1px solid #4a5497;border-radius:999px;padding:12px 22px;cursor:pointer}#inv label.pick input{display:none}

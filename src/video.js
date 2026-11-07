@@ -4,6 +4,11 @@ export class Movie{
  constructor(){this.v=document.createElement('video');Object.assign(this.v,{playsInline:true,preload:'auto',className:'hv'});document.body.appendChild(this.v);
   this.tex=null;this.src=false;this.meta=null;this.demo={t:0,playing:false,dur:30};this.onend=null;this.onblocked=null;
   this.v.addEventListener('ended',()=>this.onend?.())}
+ /** play a movie straight from a (signed) URL — used for Twin Hearts cloud movies. The movie host must allow CORS (see CINEMA_FLOW.md). */
+ async loadUrl(url,name='Movie'){if(this.v.src&&this.v.src.startsWith('blob:'))URL.revokeObjectURL(this.v.src);this.v.crossOrigin='anonymous';this.v.src=url;
+  await new Promise((r,j)=>{this.v.onloadedmetadata=r;this.v.onerror=()=>j(new Error('Could not play the cloud movie'))});
+  this.tex?.dispose();this.tex=new THREE.VideoTexture(this.v);this.tex.colorSpace=THREE.SRGBColorSpace;this.src=true;
+  return this.meta={name,size:0,dur:Math.round(this.v.duration)}}
  async load(file){if(this.v.src)URL.revokeObjectURL(this.v.src);this.v.src=URL.createObjectURL(file);
   await new Promise((r,j)=>{this.v.onloadedmetadata=r;this.v.onerror=()=>j(new Error('Cannot play this file'))});
   this.tex?.dispose();this.tex=new THREE.VideoTexture(this.v);this.tex.colorSpace=THREE.SRGBColorSpace;this.src=true;

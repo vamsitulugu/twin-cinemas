@@ -11,7 +11,7 @@ import {createCanteen} from './canteen.js';
 import {COUNTER_Z} from './lobby.js';
 import {createStudio} from './studio.js';
 import {createPlayer} from './controls.js';
-import {APP,mountInvite,markEnded} from './invite.js';
+import {APP,mountInvite,markEnded,fetchMovieInfo} from './invite.js';
 const $=id=>document.getElementById(id),wait=ms=>new Promise(r=>setTimeout(r,ms));
 const tween=(ms,f)=>new Promise(r=>{const s=performance.now();(function k(){const u=Math.min(1,(performance.now()-s)/ms);f(u*u*(3-2*u));u<1?requestAnimationFrame(k):r()})()});
 /* renderer / scene */
@@ -109,14 +109,18 @@ async function sitDown(){const seat=hall.seats.get(pending);if(!seat)return;cons
 async function standUp(){sync?.send({t:'stand'});hall.setSeatHighlight(mySeat.id,0);await me.stand(mySeat);mySeat=null;m.go(S.EXPLORE)}
 /* ---- movie: sync, full screen, seek ---- */
 let applying=false,partnerMeta=null,lastSync=0,fullOn=false;const fv=$('fv'),fc=$('fc');
-const same=(a,b)=>a&&b&&a.size===b.size&&Math.abs(a.dur-b.dur)<2;
+const same=(a,b)=>a&&b&&(APP||a.size===b.size)&&Math.abs(a.dur-b.dur)<(APP?4:2);      // from Twin Hearts the match is by length (same as the Watch Together page)
 const checkMeta=()=>{if(movie.meta&&partnerMeta)tip(same(movie.meta,partnerMeta)?'Both of you have the same movie ♥':'Heads up: your partner picked a different file, so you will not see the same movie');else if(movie.meta&&sync?.present)tip('Waiting for your partner to choose the same movie file')};
 function onMsg(q){if(q.t==='ctl'){if(Math.abs(movie.time-q.vt)>.5)movie.seek(q.vt);applying=true;m.go(q.s);applying=false}
  else if(q.t==='seek')movie.seek(q.vt);else if(q.t==='sync'){if(role===2&&m.state===S.WATCH&&q.pl)movie.correct(q.vt)}
- else if(q.t==='meta'){partnerMeta=q.meta;checkMeta()}
+ else if(q.t==='meta'){partnerMeta=q.meta;if(partnerMeta)checkMeta()}
  else if(q.t==='chat'){show(partner,q.x);audio.chat()}else if(q.t==='pop')partner.setPop(q.on),buttons();else if(q.t==='emo')doEmote(partner,q.e);else if(q.t==='order')canteen.receive(q.items||[]);else if(q.t==='go'&&APP)inv?.onGo()}
 const fileLabel=document.createElement('label');fileLabel.className='btn';fileLabel.innerHTML='🎞<input type="file" accept="video/*">';fileLabel.dataset.tip=fileLabel.ariaLabel='Choose movie file';
-fileLabel.querySelector('input').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const meta=await movie.load(f);sync?.send({t:'meta',meta});tip('Loaded '+meta.name);checkMeta()}catch(err){tip(err.message)}};
+let minfo=null,badFile='';        // minfo = the movie you picked in Twin Hearts (null when the cinema is opened on its own)
+async function loadFile(f){if(!f)return;try{const meta=await movie.load(f);badFile='';if(minfo&&minfo.dur&&Math.abs(meta.dur-minfo.dur)>3){badFile='That file is a different length than the movie you picked in Twin Hearts. Choose the same version.';movie.src=false}sync?.send({t:'meta',meta:movie.src?meta:null});tip(badFile||'Loaded '+meta.name);if(movie.src)checkMeta()}catch(err){tip(err.message)}}
+fileLabel.querySelector('input').onchange=e=>loadFile(e.target.files[0]);
+async function loadCloud(){try{const meta=await movie.loadUrl(minfo.url,minfo.title||'Movie');sync?.send({t:'meta',meta});checkMeta();tip('Movie ready ♥')}catch(err){minfo={...minfo,mode:'device'};tip(err.message+' — choose your own copy of the file instead')}}
+const movieReady=()=>!minfo||minfo.mode==='none'||(movie.src&&(minfo.mode==='cloud'||(partnerMeta&&same(movie.meta,partnerMeta))));
 m.on((s,p)=>{if(s===S.WATCH){if(movie.src){hall.setScreenMap(movie.tex);hall.fitScreen(movie.aspect)}if(p===S.END||p===S.SEATED)movie.seek(0);if(p===S.SEATED)setTimeout(()=>m.state===S.WATCH&&movie.play(),3200);else movie.play()}else if(s===S.PAUSED||s===S.BREAK)movie.pause();
  if(s!==S.WATCH&&fullOn)exitFull();if(s===S.DOOR||s===S.ENTER||s===S.EXPLORE||s===S.SEATED)movie.pause();
  if(!applying&&sync&&[S.WATCH,S.PAUSED,S.BREAK,S.END].includes(s))sync.send({t:'ctl',s,vt:movie.time});
@@ -241,4 +245,5 @@ renderer.setAnimationLoop(()=>{const raw=clock.getDelta(),dt=Math.min(raw,.05),t
  });
 let inv=null;
 await wait(300);$('loading').classList.add('off');m.go(S.DOOR);setView('door');$('door-ui').style.display='flex';
-if(APP){await join(APP.slot);inv=mountInvite({sync:()=>sync,enter:startEnter,stat})}   // opened from Twin Hearts: avatar + room are already decidedaddEventListener('beforeunload',()=>sync?.close());
+if(APP){await join(APP.slot);inv=mountInvite({sync:()=>sync,enter:startEnter,stat,movie:()=>({info:minfo,loaded:movie.src,ready:movieReady(),bad:badFile,pick:loadFile})});
+ minfo=await fetchMovieInfo();if(minfo?.mode==='cloud')loadCloud()}   // opened from Twin Hearts: avatar + room are already decidedaddEventListener('beforeunload',()=>sync?.close());
