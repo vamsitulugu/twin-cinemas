@@ -1,0 +1,24 @@
+:root{--p1:#ff5c8a;--p2:#4db2ff;--panel:#1a1426e8;--mute:#a79ebf;color-scheme:dark}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:#07050c;color:#f3eefc;font-family:system-ui,sans-serif;overflow:hidden;touch-action:none}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+#loading,#ov{position:fixed;inset:0;z-index:9;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#000;letter-spacing:5px;transition:opacity 1s;text-align:center}
+#loading.off{opacity:0;pointer-events:none}#ov{display:none;pointer-events:none;background:#0008;letter-spacing:0;font-size:28px;z-index:7}
+#door-ui{position:fixed;inset:auto 0 max(28px,env(safe-area-inset-bottom)) 0;z-index:5;display:none;flex-direction:column;align-items:center;gap:10px;text-align:center}
+#door-ui h1{margin:0;font-size:clamp(26px,7vw,46px);letter-spacing:8px;text-shadow:0 0 24px var(--p1)}#door-ui p{margin:0;color:var(--mute)}
+button{font:inherit;cursor:pointer;background:var(--panel);color:#fff;border:1px solid #5b4f78;border-radius:10px;padding:9px 13px}
+button.main{background:linear-gradient(90deg,var(--p1),var(--p2));border:0;font-weight:700;font-size:16px;padding:12px 26px}
+#hud{position:fixed;inset:0;pointer-events:none;z-index:6}#hud>*{pointer-events:auto}
+#tip{position:absolute;top:max(12px,env(safe-area-inset-top));left:0;right:0;text-align:center;font-size:13px;color:var(--mute);text-shadow:0 1px 4px #000;pointer-events:none}
+#bar{position:absolute;left:50%;transform:translateX(-50%);bottom:max(14px,env(safe-area-inset-bottom));display:flex;gap:6px;flex-wrap:wrap;justify-content:center;width:min(640px,96%)}
+#dbg{position:fixed;left:8px;bottom:8px;font:11px monospace;color:#fff6;z-index:8;pointer-events:none}
+#door-ui input{background:var(--panel);color:#fff;border:1px solid #403556;border-radius:10px;padding:10px 12px;font:inherit;width:min(320px,90%);text-align:center}#roles button.on{background:#3a2a5a;box-shadow:0 0 14px #fff6}#open:disabled{opacity:.35}#dstat{color:var(--mute);min-height:1em}
+#ov button{pointer-events:auto}.btn{display:inline-block;background:var(--panel);border:1px dashed #5b4f78;border-radius:10px;padding:9px 13px;cursor:pointer;font-size:13px;color:var(--mute)}.btn input{display:none}
+#seek{position:fixed;left:50%;transform:translateX(-50%);bottom:max(64px,calc(env(safe-area-inset-bottom) + 58px));width:min(560px,92%);display:none;gap:8px;align-items:center;z-index:6;font-size:12px;color:var(--mute)}#seek input,#fc input{flex:1;accent-color:var(--p1)}
+.hv{position:fixed;left:-9999px;width:4px;height:4px}.fullvid{position:static;width:100%;height:100%;object-fit:contain;background:#000}
+#fv{position:fixed;inset:0;z-index:10;background:#000;display:none;align-items:center;justify-content:center}.slot{position:absolute;inset:0}
+#fc{position:absolute;left:0;right:0;bottom:0;display:flex;gap:10px;align-items:center;padding:14px max(14px,env(safe-area-inset-left));background:linear-gradient(#0000,#000c);opacity:0;transition:opacity .4s;font-size:13px}#fc.show{opacity:1}
+#chat{position:fixed;top:max(38px,calc(env(safe-area-inset-top) + 28px));left:50%;transform:translateX(-50%);width:min(420px,92%);display:none;gap:6px;z-index:6}#chat input{flex:1;background:var(--panel);color:#fff;border:1px solid #403556;border-radius:10px;padding:9px 12px;font:inherit;font-size:14px}
+#top-r{position:fixed;top:max(8px,env(safe-area-inset-top));right:8px;z-index:6;display:none;gap:6px}
+.bubble{position:fixed;z-index:6;transform:translate(-50%,-100%);max-width:220px;padding:7px 12px;border-radius:16px;font-size:14px;color:#fff;pointer-events:none;opacity:0;transition:opacity .4s;word-break:break-word;box-shadow:0 2px 10px #0008}
+.fl{position:fixed;z-index:6;font-size:34px;pointer-events:none;animation:fl 2s ease-out forwards}@keyframes fl{from{opacity:1;transform:translate(-50%,0) scale(.8)}to{opacity:0;transform:translate(-50%,-110px) scale(1.5)}}
+#joy{position:fixed;left:max(18px,env(safe-area-inset-left));bottom:max(90px,calc(env(safe-area-inset-bottom) + 80px));width:110px;height:110px;border-radius:50%;background:#ffffff14;border:1px solid #fff3;display:none;z-index:6;touch-action:none}#joy i{position:absolute;left:35px;top:35px;width:40px;height:40px;border-radius:50%;background:#fff6}
