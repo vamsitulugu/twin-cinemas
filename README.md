@@ -27,4 +27,7 @@ src/player.js  a person in the hall (me or partner): move, sit, stand, popcorn
 src/net.js     Supabase Realtime room, presence heartbeat (BroadcastChannel fallback)
 src/video.js   movie source (file or demo), play/pause/seek, drift correction
 src/audio.js   synthesized sounds (room tone, door, chat, crunch, chime)
-public/models  avatar_f.glb, avatar_m.glb (swap in your own rigged models with Mixamo bone names)
+src/studio.js  outside-the-theatre navy studio screen (couple avatars, Animate / PNG / camera rail)
+src/look.js    per-part recolouring so each audience member differs (skin, hair, top, trousers, shoes)
+public/models  couple_f.glb (Person 1) + couple_m.glb (Person 2) = your MetaPerson avatars (only used for the two of you); aud_a/aud_b/aud_c + avatar_m = four different audience people (sample avatars from the open-source TalkingHead repo)
+public/models/audience  drop more MetaPerson .glb files here + list them in index.json for extra faces

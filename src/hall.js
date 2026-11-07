@@ -133,7 +133,7 @@ export function buildHall(scene,renderer){
  const cushGeo=mergeGeometries([rb(.52,.13,.5,.05,0,.47,-.03),rb(.52,.8,.13,.06,0,.98,.27,.13),rb(.42,.24,.15,.06,0,1.38,.32,.13)]);
  const darkGeo=mergeGeometries([rb(.07,.07,.56,.025,-.3,.66,-.02),rb(.07,.07,.56,.025,.3,.66,-.02),rb(.06,.2,.1,.02,-.3,.54,.2),rb(.06,.2,.1,.02,.3,.54,.2),rb(.12,.42,.24,.03,0,.21,.14),rb(.1,.04,.66,.015,0,.02,0)]);
  const redBase=M(0xa51d1d,{roughness:.9,bumpMap:bumpS,bumpScale:.25}),greyBase=M(0x453e3c,{roughness:.9,bumpMap:bumpS,bumpScale:.25});
- const seats=new Map(),boxes=[],taken=new Set(['B13','C5','D9','E4','E12','F7','G3','G10','H6','H13']),picks=[];
+ const seats=new Map(),boxes=[],taken=new Set(['A3','A13','B2','B6','B13','C5','C10','C14','D3','D9','D12','E4','E12','F2','F7','F14','G3','G10','H6','H9','H13','I4','I8','I12']),picks=[];
  for(let r=0;r<NROWS;r++)for(let c=0;c<COLS;c++){
   const id=ROWS[r]+(c+1),x=seatX(c),z=rowZ(r),y=floorY(z),g=new THREE.Group(),red=c<3||c>11||r===0||r===NROWS-1,cushMat=(red?redBase:greyBase).clone();
   const a=new THREE.Mesh(cushGeo,cushMat),b=new THREE.Mesh(darkGeo,dark);for(const m of[a,b]){m.castShadow=m.receiveShadow=true;m.userData.seatId=id;g.add(m);picks.push(m)}

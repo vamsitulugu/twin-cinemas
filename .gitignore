@@ -1,0 +1,23 @@
+# dependencies
+node_modules/
+
+# build output (Vercel rebuilds it)
+dist/
+
+# secrets (keep .env.example committed)
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# vercel
+.vercel

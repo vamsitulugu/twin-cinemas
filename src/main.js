@@ -9,6 +9,7 @@ import {Movie,fmt} from './video.js';
 import {audio} from './audio.js';
 import {createCanteen} from './canteen.js';
 import {COUNTER_Z} from './lobby.js';
+import {createStudio} from './studio.js';
 const $=id=>document.getElementById(id),wait=ms=>new Promise(r=>setTimeout(r,ms));
 const tween=(ms,f)=>new Promise(r=>{const s=performance.now();(function k(){const u=Math.min(1,(performance.now()-s)/ms);f(u*u*(3-2*u));u<1?requestAnimationFrame(k):r()})()});
 /* renderer / scene */
@@ -20,8 +21,8 @@ const fit=()=>{camera.aspect=innerWidth/innerHeight;camera.fov=camera.aspect<1?7
 const hall=buildHall(scene,renderer),rig=new CameraRig(camera,renderer.domElement,{onManual:()=>setView('orbit')});
 const movie=new Movie();
 let gl;try{gl=await loadAvatars(p=>$('loading').textContent='LOADING THEATRE… '+Math.round(p*100)+'%')}catch(e){$('loading').textContent='Could not load avatars: '+e.message;throw e}
-const aud=seatAudience(scene,hall,gl);
-const spawn=(kind,h,color,x)=>{const p=new Player(makeAvatar(gl[kind],{height:h,walker:true,hide:kind==='m'?['Wolf3D_Headwear']:[]}),color);scene.add(p.group);p.pos.set(x,floorY(DOOR_Z+1.9),DOOR_Z+1.9);p.group.rotation.y=Math.PI;return p};
+const aud=seatAudience(scene,hall,gl),studio=createStudio(renderer,gl);studio.on=true;
+const spawn=(kind,h,color,x)=>{const p=new Player(makeAvatar(gl[kind],{height:h,walker:true,relaxed:true,style:kind==='cf'?'f':'m'}),color);scene.add(p.group);p.pos.set(x,floorY(DOOR_Z+1.9),DOOR_Z+1.9);p.group.rotation.y=Math.PI;return p};
 let me=null,partner=null,role=0,sync=null,partnerSeat=null,doorOpen=false;hall.lobbyMode=true;                                   // the hall starts with the couple outside, in the lobby
 let bagPrev={popcorn:false,drink:false};
 const canteen=createCanteen({canGift:()=>!!sync?.present,sfx:n=>audio[n]?.(),
@@ -30,7 +31,7 @@ const canteen=createCanteen({canGift:()=>!!sync?.present,sfx:n=>audio[n]?.(),
  onReady:(order,kinds,mine)=>{if(mine)hall.lobby.showTray(kinds)},
  onClose:()=>{if(m.state===S.DOOR)tip(LOBBY_TIP)}});
 const LOBBY_TIP='Walk anywhere (WASD / tap the floor) · stand at the counter to order · walk through the door to go in';
-const COL={1:0xff5c8a,2:0x4db2ff},KIND={1:['f',1.68],2:['m',1.8]},LX={1:-.5,2:.5};
+const COL={1:0xff5c8a,2:0x4db2ff},KIND={1:['cf',1.68],2:['cm',1.8]},LX={1:-.5,2:.5};
 const openDoor=()=>doorOpen?Promise.resolve():(doorOpen=true,tween(800,u=>hall.setDoor(u)));
 const fsOn=()=>document.documentElement.requestFullscreen?.().catch(()=>{}),fsOff=()=>document.fullscreenElement&&document.exitFullscreen();
 /* state machine drives everything */
@@ -57,6 +58,13 @@ m.on(async(s,p)=>{const ui=$('door-ui'),ov=$('ov');ui.style.display=s===S.DOOR?'
  if(s===S.BREAK){fade(1,1200);setView('couple');ov.innerHTML='☕ Break time<br><small style="font-size:14px;color:#a79ebf">Resume when you are back</small>';ov.style.display='flex'}
  if(s===S.END){fade(1,2500);setView('couple');ov.innerHTML='The End ♥';const a=document.createElement('button');a.textContent='↻ Watch again';a.className='main';a.onclick=()=>{hall.setCurtains(1);m.go(S.WATCH)};const l=document.createElement('button');l.textContent='✕ Leave theatre';l.onclick=()=>location.reload();ov.append(a,l);ov.style.display='flex'}
  buttons()});
+/* ---- studio (outside the theatre, before joining) ---- */
+const stEl=$('st'),fadeEl=$('fade');stEl.style.display='block';
+function leaveStudio(){fadeEl.classList.add('on');setTimeout(()=>{studio.on=false;stEl.style.display='none';fadeEl.classList.remove('on')},560)}
+$('st-anim').onclick=()=>studio.wave();
+$('st-spin').onclick=e=>e.currentTarget.classList.toggle('on',studio.toggleSpin());
+document.querySelectorAll('#st-rail [data-v]').forEach(b=>b.onclick=()=>{studio.view(b.dataset.v);document.querySelectorAll('#st-rail [data-v]').forEach(x=>x.classList.toggle('on',x===b))});
+$('st-png').onclick=async()=>{const bl=await studio.png();if(!bl)return;const a=document.createElement('a');a.href=URL.createObjectURL(bl);a.download='our-twin-cinema.png';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)};
 /* actions */
 let blocked=false,atCounter=false;
 const startEnter=()=>{if(blocked||m.state!==S.DOOR)return;audio.door();audio.ambient(.05);m.go(S.ENTER)};
@@ -67,7 +75,7 @@ async function partnerSit(id){const seat=hall.seats.get(id);if(!seat||!partner||
  if(m.is(S.DOOR,S.ENTER)||partner.pos.z>DOOR_Z+.1)partner.snapSit(seat);else{await partner.walk(hall.route(partner.pos,seat));await partner.sit(seat)}buttons()}
 async function partnerStand(){const s=partnerSeat;if(!s)return;partnerSeat=null;hall.taken.delete(s.id);hall.setSeatHighlight(s.id,0);await partner.stand(s);partner.busy=false;buttons()}
 const snap=()=>({x:me.pos.x,z:me.pos.z,r:me.group.rotation.y,w:me.av.walk?1:0,s:mySeat?.id||null,pc:me.popcorn?1:0,dr:me.drink?1:0});
-async function join(r){if(role)return;role=r;audio.init();$('door-ui').classList.add('joined');const code=$('room').value.trim()||location.hash.slice(1)||'lobby';history.replaceState(0,'','#'+code);
+async function join(r){if(role)return;role=r;leaveStudio();audio.init();$('door-ui').classList.add('joined');const code=$('room').value.trim()||location.hash.slice(1)||'lobby';history.replaceState(0,'','#'+code);
  document.querySelectorAll('#roles button').forEach(b=>b.classList.toggle('on',+b.dataset.r===r));$('room').disabled=true;stat('Connecting…');
  const mk=q=>{const[k,h]=KIND[q],p=spawn(k,h,COL[q],LX[q]);return p};me=mk(r);partner=mk(3-r);partner.group.visible=false;
  setView('follow',{yaw:0,pitch:.5,dist:4.5});canteen.showBag(true);tip(LOBBY_TIP);
@@ -144,6 +152,6 @@ renderer.setAnimationLoop(()=>{const dt=Math.min(clock.getDelta(),.05),t=clock.e
  movie.tick(dt);const now=performance.now();if(role===1&&sync?.present&&m.state===S.WATCH&&now-lastSync>3000){lastSync=now;sync.send({t:'sync',vt:movie.time,pl:movie.playing})}
  if(movie.dur){const v=movie.time/movie.dur*1000;$('sk').value=v;$('fsk').value=v;$('tc').textContent=$('ftc').textContent=fmt(movie.time);$('td').textContent=fmt(movie.dur)}
  aud.forEach(a=>a.update(dt,t));if(me){me.update(dt,t);partner.update(dt,t);rig.ctx.me.copy(me.pos);rig.ctx.couple.copy(me.pos);if(partner.group.visible)rig.ctx.couple.add(partner.pos).multiplyScalar(.5);sync?.tick(performance.now(),me.av.walk,snap)}rig.ctx.lobbyY=floorY(DOOR_Z);rig.ctx.lobby=m.state===S.DOOR;if(m.is(S.DOOR,S.ENTER))hall.lobby.update(t);
- bubbleTick(now);hall.drawScreen(t,m.is(S.WATCH,S.PAUSED,S.BREAK),movie.dur?movie.time/movie.dur:0);rig.update(dt,t);renderer.render(scene,camera);
+ bubbleTick(now);hall.drawScreen(t,m.is(S.WATCH,S.PAUSED,S.BREAK),movie.dur?movie.time/movie.dur:0);rig.update(dt,t);if(studio.on)studio.render(dt,t);else renderer.render(scene,camera);
  $('dbg').textContent=`${m.state} · cam:${view}`});
 await wait(300);$('loading').classList.add('off');m.go(S.DOOR);setView('door');$('door-ui').style.display='flex';addEventListener('beforeunload',()=>sync?.close());
