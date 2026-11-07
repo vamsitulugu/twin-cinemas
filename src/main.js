@@ -11,6 +11,7 @@ import {createCanteen} from './canteen.js';
 import {COUNTER_Z} from './lobby.js';
 import {createStudio} from './studio.js';
 import {createPlayer} from './controls.js';
+import {APP,mountInvite,markEnded} from './invite.js';
 const $=id=>document.getElementById(id),wait=ms=>new Promise(r=>setTimeout(r,ms));
 const tween=(ms,f)=>new Promise(r=>{const s=performance.now();(function k(){const u=Math.min(1,(performance.now()-s)/ms);f(u*u*(3-2*u));u<1?requestAnimationFrame(k):r()})()});
 /* renderer / scene */
@@ -93,7 +94,7 @@ async function join(r){if(role)return;role=r;leaveStudio();audio.init();$('door-
  setView('follow',{yaw:0,pitch:.5,dist:4.5});canteen.showBag(true);hint(LOBBY_TIP);
  sync=await createSync(code,r,{
   onJoin(){partner.group.visible=true;stat('Your partner is in the lobby ♥');hint(m.state===S.DOOR?LOBBY_TIP:'');buttons()},
-  onHello(){sync?.send({t:'pos',...snap()});if(movie.meta)sync?.send({t:'meta',meta:movie.meta})},onMsg,
+  onHello(){sync?.send({t:'pos',...snap()});if(APP&&inv?.isStarted())sync?.send({t:'go'});if(movie.meta)sync?.send({t:'meta',meta:movie.meta})},onMsg,
   onPos(q){if(!partner.tgt)partner.net(q,true);else partner.net(q);partner.group.visible=true;if(q.z<DOOR_Z+.7)openDoor();
    if(q.s&&!partnerSeat)partnerSit(q.s);else if(!q.s&&partnerSeat&&!partner.script)partnerStand();if(!!q.pc!==!!partner.popcorn)partner.setPop(!!q.pc);if(!!q.dr!==!!partner.drink)partner.setDrink(!!q.dr)},
   onSit:q=>partnerSit(q.id),onStand:()=>partnerStand(),
@@ -113,7 +114,7 @@ const checkMeta=()=>{if(movie.meta&&partnerMeta)tip(same(movie.meta,partnerMeta)
 function onMsg(q){if(q.t==='ctl'){if(Math.abs(movie.time-q.vt)>.5)movie.seek(q.vt);applying=true;m.go(q.s);applying=false}
  else if(q.t==='seek')movie.seek(q.vt);else if(q.t==='sync'){if(role===2&&m.state===S.WATCH&&q.pl)movie.correct(q.vt)}
  else if(q.t==='meta'){partnerMeta=q.meta;checkMeta()}
- else if(q.t==='chat'){show(partner,q.x);audio.chat()}else if(q.t==='pop')partner.setPop(q.on),buttons();else if(q.t==='emo')doEmote(partner,q.e);else if(q.t==='order')canteen.receive(q.items||[])}
+ else if(q.t==='chat'){show(partner,q.x);audio.chat()}else if(q.t==='pop')partner.setPop(q.on),buttons();else if(q.t==='emo')doEmote(partner,q.e);else if(q.t==='order')canteen.receive(q.items||[]);else if(q.t==='go'&&APP)inv?.onGo()}
 const fileLabel=document.createElement('label');fileLabel.className='btn';fileLabel.innerHTML='🎞<input type="file" accept="video/*">';fileLabel.dataset.tip=fileLabel.ariaLabel='Choose movie file';
 fileLabel.querySelector('input').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const meta=await movie.load(f);sync?.send({t:'meta',meta});tip('Loaded '+meta.name);checkMeta()}catch(err){tip(err.message)}};
 m.on((s,p)=>{if(s===S.WATCH){if(movie.src){hall.setScreenMap(movie.tex);hall.fitScreen(movie.aspect)}if(p===S.END||p===S.SEATED)movie.seek(0);if(p===S.SEATED)setTimeout(()=>m.state===S.WATCH&&movie.play(),3200);else movie.play()}else if(s===S.PAUSED||s===S.BREAK)movie.pause();
@@ -205,7 +206,7 @@ function togglePop(){const on=!me.popcorn;me.setPop(on);sync?.send({t:'pop',on})
 function doEmote(p,e){if(e==='wave')p.av.emote('wave');else{const ch=e==='heart'?'❤️':'👏';head.copy(p.pos);head.y+=2.2;head.project(camera);const f=document.createElement('div');f.className='fl';f.textContent=ch;f.style.left=(head.x*.5+.5)*innerWidth+'px';f.style.top=(-head.y*.5+.5)*innerHeight+'px';document.body.appendChild(f);setTimeout(()=>f.remove(),2000)}
  if(e==='heart')audio.heart()}
 function emote(e){doEmote(me,e);sync?.send({t:'emo',e})}
-function leaveTheatre(){if(confirm('Leave the theatre?')){sync?.close();location.reload()}}$('leave').onclick=leaveTheatre;let muted=false;function toggleAlerts(){muted=!muted;audio.mute(muted);$('snd').textContent=muted?'🔕':'🔔'}$('snd').onclick=toggleAlerts;
+function leaveTheatre(){if(confirm('Leave the theatre?')){markEnded();sync?.close();if(APP&&APP.back)location.href=APP.back;else location.reload()}}$('leave').onclick=leaveTheatre;let muted=false;function toggleAlerts(){muted=!muted;audio.mute(muted);$('snd').textContent=muted?'🔕':'🔔'}$('snd').onclick=toggleAlerts;
 m.on((s,p)=>{$('top-r').style.display=s===S.DOOR?'none':(s===S.ENTER?'none':'flex');$('joy').style.display=s===S.EXPLORE&&matchMedia('(pointer:coarse)').matches?'block':'none';
  audio.ambient(s===S.WATCH?.015:.05);if(s===S.END)audio.chime()});
 {const joy=$('joy'),kn=joy.firstElementChild,mv=e=>{const r=joy.getBoundingClientRect(),dx=e.clientX-(r.left+55),dy=e.clientY-(r.top+55),d=Math.hypot(dx,dy),k=d>45?45/d:1;kn.style.transform=`translate(${dx*k}px,${dy*k}px)`;jx=dx*k/45;jz=dy*k/45};
@@ -226,7 +227,7 @@ renderer.setAnimationLoop(()=>{const raw=clock.getDelta(),dt=Math.min(raw,.05),t
   me.move(dx,dz,dt,hall,k)}
  if(me&&m.state===S.DOOR&&!me.script&&!canteen.isOpen&&!me.seated){const lx=me.pos.x,lz=me.pos.z-DOOR_Z,nearC=lz>COUNTER_Z-.7&&Math.abs(lx)<3.5;
   if(nearC&&!atCounter){atCounter=true;target=null;me.face(0,1);canteen.open()}else if(!nearC&&lz<COUNTER_Z-1.4)atCounter=false;
-  if(lz<1.25&&Math.abs(lx)<1&&role)startEnter()}
+  if(lz<1.25&&Math.abs(lx)<1&&role&&!APP)startEnter()}
  movie.tick(dt);const now=performance.now();if(role===1&&sync?.present&&m.state===S.WATCH&&now-lastSync>3000){lastSync=now;sync.send({t:'sync',vt:movie.time,pl:movie.playing})}
  if(movie.dur&&now-lastUI>200){lastUI=now;const v=movie.time/movie.dur*1000,tc=fmt(movie.time),td=fmt(movie.dur);if(!UI.sk.matches(':active'))UI.sk.value=v;if(!UI.fsk.matches(':active'))UI.fsk.value=v;
   if(UI.tcT!==tc){UI.tcT=tc;UI.tc.textContent=UI.ftc.textContent=tc}if(UI.tdT!==td){UI.tdT=td;UI.td.textContent=td}pl.tick()}
@@ -238,4 +239,6 @@ renderer.setAnimationLoop(()=>{const raw=clock.getDelta(),dt=Math.min(raw,.05),t
  else{renderer.shadowMap.autoUpdate=false;shAcc+=dt;const dyn=!!me&&(moving(me)||(partner.group.visible&&moving(partner)));
   if(m.state!==S.DOOR&&(dyn||shAcc>=(m.is(S.WATCH)?.5:.25))){shAcc=0;renderer.shadowMap.needsUpdate=true}renderer.render(scene,camera)}
  });
-await wait(300);$('loading').classList.add('off');m.go(S.DOOR);setView('door');$('door-ui').style.display='flex';addEventListener('beforeunload',()=>sync?.close());
+let inv=null;
+await wait(300);$('loading').classList.add('off');m.go(S.DOOR);setView('door');$('door-ui').style.display='flex';
+if(APP){await join(APP.slot);inv=mountInvite({sync:()=>sync,enter:startEnter,stat})}   // opened from Twin Hearts: avatar + room are already decidedaddEventListener('beforeunload',()=>sync?.close());

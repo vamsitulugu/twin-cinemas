@@ -173,3 +173,13 @@ body.pl-hide{cursor:none}
  .pl-emoji{top:min(66%,calc(100% - 150px))}.pnl[data-p=emoji]{top:min(66%,calc(100% - 150px))}}
 body.pl #ov{justify-content:flex-start;padding-top:max(76px,16vh)}      /* "Break time" / "Tap to join" stay above the centre buttons */
 body.pl #bagbtn{top:calc(max(8px,env(safe-area-inset-top)) + 54px);transition:opacity .35s}body.pl-hide #bagbtn{opacity:0;pointer-events:none}      /* keep "My snacks" clear of the back arrow, and fade it with the controls */
+/* Twin Hearts hand-off lobby panel (src/invite.js) */
+#inv{position:fixed;left:0;right:0;bottom:max(18px,env(safe-area-inset-bottom));z-index:6;flex-direction:column;align-items:center;gap:10px;padding:14px 12px 4px;text-align:center;pointer-events:none;background:linear-gradient(#0000,#0b0d1ccc 40%)}
+#inv>*{pointer-events:auto}
+#inv .inv-t{color:#fff;font-size:15px;max-width:min(420px,92vw);text-shadow:0 1px 8px #000}
+#inv .inv-r{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;align-items:center}
+#inv button{background:#ffffff18;color:#fff;border:1px solid #4a5497;border-radius:999px;padding:12px 22px;font:inherit;cursor:pointer}
+#inv button.main{background:linear-gradient(135deg,#c2305a,#8e3fd4);border-color:transparent;font-weight:600}
+#inv button:disabled{opacity:.5;cursor:default}
+#inv .inv-b{color:var(--mute);font-size:14px;padding:10px 6px;text-decoration:none}
+body.app #dstat{display:none}
