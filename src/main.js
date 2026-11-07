@@ -29,7 +29,7 @@ const canteen=createCanteen({canGift:()=>!!sync?.present,sfx:n=>audio[n]?.(),
  onGift:items=>sync?.send({t:'order',items}),
  onReady:(order,kinds,mine)=>{if(mine)hall.lobby.showTray(kinds)},
  onClose:()=>{if(m.state===S.DOOR)tip(LOBBY_TIP)}});
-const LOBBY_TIP='Walk around the lobby (WASD / tap the floor) · tap 🍿 Canteen to order snacks';
+const LOBBY_TIP='Walk anywhere (WASD / tap the floor) · stand at the counter to order · walk through the door to go in';
 const COL={1:0xff5c8a,2:0x4db2ff},KIND={1:['f',1.68],2:['m',1.8]},LX={1:-.5,2:.5};
 const openDoor=()=>doorOpen?Promise.resolve():(doorOpen=true,tween(800,u=>hall.setDoor(u)));
 const fsOn=()=>document.documentElement.requestFullscreen?.().catch(()=>{}),fsOff=()=>document.fullscreenElement&&document.exitFullscreen();
@@ -42,7 +42,7 @@ const B=(label,fn,cls)=>{const b=document.createElement('button');b.textContent=
 function buttons(){bar.innerHTML='';const s=m.state;
  if(s===S.EXPLORE&&pending)B('🪑 Sit here',sitDown,'main');
  if(s===S.SEATED){const wait2=sync?.present&&!partnerSeat;B(wait2?'⏳ Waiting for partner to sit':'▶ Start movie',()=>m.go(S.WATCH),'main').disabled=wait2;B('🧍 Stand up',standUp);}
- if([S.WATCH,S.PAUSED,S.BREAK].includes(s)){B(s===S.WATCH?'⏸ Pause':'▶ Play',()=>m.go(s===S.WATCH?S.PAUSED:S.WATCH),'main');B('🎬 Screen',()=>setView('screen'));B('⛶ Full screen',enterFull);B(movie.muted?'🔇 Sound off':'🔊 Sound',()=>{movie.muted=!movie.muted;buttons()});B('☕ Break',()=>m.go(S.BREAK));B('🔄 360°',()=>setView('orbit',{yaw:Math.PI,pitch:.35,dist:4.5}));}
+ if([S.WATCH,S.PAUSED,S.BREAK].includes(s)){B(s===S.WATCH?'⏸ Pause':'▶ Play',()=>m.go(s===S.WATCH?S.PAUSED:S.WATCH),'main');B('🎬 Screen',()=>setView('screen'));B('⛶ Full screen',enterFull);B(movie.muted?'🔇 Sound off':'🔊 Sound',()=>{movie.muted=!movie.muted;buttons()});B('☕ Break',()=>m.go(S.BREAK));B('🔄 360°',()=>setView('orbit',{yaw:Math.PI,pitch:.35,dist:4.5,auto:true}));}
  if(me&&m.is(S.SEATED,S.WATCH,S.PAUSED,S.BREAK))B(me.popcorn?'🍿 Put away':'🍿 Popcorn',togglePop);
  if(me&&!m.is(S.DOOR,S.ENTER,S.END)){B('❤️',()=>emote('heart'));B('👋',()=>emote('wave'));B('👏',()=>emote('clap'))}
  if([S.EXPLORE,S.SEATED,S.PAUSED,S.BREAK].includes(s))bar.appendChild(fileLabel);
@@ -58,22 +58,19 @@ m.on(async(s,p)=>{const ui=$('door-ui'),ov=$('ov');ui.style.display=s===S.DOOR?'
  if(s===S.END){fade(1,2500);setView('couple');ov.innerHTML='The End ♥';const a=document.createElement('button');a.textContent='↻ Watch again';a.className='main';a.onclick=()=>{hall.setCurtains(1);m.go(S.WATCH)};const l=document.createElement('button');l.textContent='✕ Leave theatre';l.onclick=()=>location.reload();ov.append(a,l);ov.style.display='flex'}
  buttons()});
 /* actions */
-$('open').onclick=()=>{audio.init();audio.door();audio.ambient(.05);m.go(S.ENTER)};
-async function goCanteen(){if(!me||m.state!==S.DOOR||me.script||canteen.isOpen)return;target=null;const sx=role===1?-.9:.9,sz=DOOR_Z+COUNTER_Z;
- setView('follow',{yaw:Math.PI,pitch:.38,dist:4.6});if(Math.hypot(me.pos.x-sx,me.pos.z-sz)>.5)await me.walk([[sx,sz]]);
- if(m.state!==S.DOOR)return;me.face(0,1);await wait(250);if(m.state===S.DOOR)canteen.open()}
-async function goDoor(){if(!me||m.state!==S.DOOR||me.script||canteen.isOpen)return;target=null;setView('follow',{yaw:0,pitch:.5,dist:4.5});await me.walk([[LX[role],DOOR_Z+1.9]]);me.face(Math.PI,1)}
-$('canteen-go').onclick=goCanteen;$('door-back').onclick=goDoor;
+let blocked=false,atCounter=false;
+const startEnter=()=>{if(blocked||m.state!==S.DOOR)return;audio.door();audio.ambient(.05);m.go(S.ENTER)};
+const walkToCounter=()=>{target={x:role===1?-.9:.9,z:DOOR_Z+COUNTER_Z}};
 const stat=t=>$('dstat').textContent=t||'';
 let lost=null;
 async function partnerSit(id){const seat=hall.seats.get(id);if(!seat||!partner||partnerSeat?.id===id)return;if(mySeat?.id===id){if(role>3-role)lost=id;return}partnerSeat=seat;hall.taken.add(id);hall.setSeatHighlight(id,COL[3-role]);partner.busy=true;buttons();
  if(m.is(S.DOOR,S.ENTER)||partner.pos.z>DOOR_Z+.1)partner.snapSit(seat);else{await partner.walk(hall.route(partner.pos,seat));await partner.sit(seat)}buttons()}
 async function partnerStand(){const s=partnerSeat;if(!s)return;partnerSeat=null;hall.taken.delete(s.id);hall.setSeatHighlight(s.id,0);await partner.stand(s);partner.busy=false;buttons()}
 const snap=()=>({x:me.pos.x,z:me.pos.z,r:me.group.rotation.y,w:me.av.walk?1:0,s:mySeat?.id||null,pc:me.popcorn?1:0,dr:me.drink?1:0});
-async function join(r){if(role)return;role=r;const code=$('room').value.trim()||location.hash.slice(1)||'lobby';history.replaceState(0,'','#'+code);
+async function join(r){if(role)return;role=r;audio.init();$('door-ui').classList.add('joined');const code=$('room').value.trim()||location.hash.slice(1)||'lobby';history.replaceState(0,'','#'+code);
  document.querySelectorAll('#roles button').forEach(b=>b.classList.toggle('on',+b.dataset.r===r));$('room').disabled=true;stat('Connecting…');
  const mk=q=>{const[k,h]=KIND[q],p=spawn(k,h,COL[q],LX[q]);return p};me=mk(r);partner=mk(3-r);partner.group.visible=false;
- setView('follow',{yaw:0,pitch:.5,dist:4.5});$('canteen-go').disabled=$('door-back').disabled=false;canteen.showBag(true);tip(LOBBY_TIP);
+ setView('follow',{yaw:0,pitch:.5,dist:4.5});canteen.showBag(true);tip(LOBBY_TIP);
  sync=await createSync(code,r,{
   onJoin(){partner.group.visible=true;stat('Your partner is in the lobby ♥');tip(m.state===S.DOOR?LOBBY_TIP:'');buttons()},
   onHello(){sync?.send({t:'pos',...snap()});if(movie.meta)sync?.send({t:'meta',meta:movie.meta})},onMsg,
@@ -81,8 +78,8 @@ async function join(r){if(role)return;role=r;const code=$('room').value.trim()||
    if(q.s&&!partnerSeat)partnerSit(q.s);else if(!q.s&&partnerSeat&&!partner.script)partnerStand();if(!!q.pc!==!!partner.popcorn)partner.setPop(!!q.pc);if(!!q.dr!==!!partner.drink)partner.setDrink(!!q.dr)},
   onSit:q=>partnerSit(q.id),onStand:()=>partnerStand(),
   onLeave(){stat('Your partner left');tip('Your partner left the theatre');partner.group.visible=false;if(partnerSeat){hall.taken.delete(partnerSeat.id);hall.setSeatHighlight(partnerSeat.id,0);partnerSeat=null}partner.busy=false;buttons()},
-  onConflict(){stat('That seat in the room is already taken — reload and pick the other person');$('open').disabled=true;sync?.close()}});
- $('open').disabled=false;stat(ONLINE?'Waiting for your partner at the door…':'Local test mode: open a second tab with the same room code')}
+  onConflict(){stat('That seat in the room is already taken — reload and pick the other person');blocked=true;sync?.close()}});
+ stat(ONLINE?'Waiting for your partner at the door…':'Local test mode: open a second tab with the same room code')}
 document.querySelectorAll('#roles button').forEach(b=>b.onclick=()=>join(+b.dataset.r));$('room').value=decodeURIComponent(location.hash.slice(1));
 async function sitDown(){const seat=hall.seats.get(pending);if(!seat)return;const id=pending;pending=null;mySeat=seat;sync?.send({t:'sit',id});buttons();
  await wait(sync?.present?250:0);if(lost===id){mySeat=null;lost=null;hall.setSeatHighlight(id,0);tip('Your partner got that seat first — pick another');buttons();partnerSit(id);return}
@@ -115,7 +112,7 @@ const doSeek=v=>{movie.seek(v/1000*movie.dur);sync?.send({t:'seek',vt:movie.time
 const keys={};addEventListener('keydown',e=>{if(e.target.tagName!=='INPUT')keys[e.key.toLowerCase()]=1});addEventListener('keyup',e=>delete keys[e.key.toLowerCase()]);
 const rc=new THREE.Raycaster(),nd=new THREE.Vector2();let target=null;
 renderer.domElement.addEventListener('pointerup',e=>{if(!me||me.script||!rig.wasTap||canteen.isOpen)return;const lob=m.state===S.DOOR;if(!lob&&m.state!==S.EXPLORE)return;nd.set(e.clientX/innerWidth*2-1,-(e.clientY/innerHeight)*2+1);rc.setFromCamera(nd,camera);
- if(lob){const r=rc.intersectObjects([...hall.lobby.hits,...hall.lobby.floors])[0];if(r){if(hall.lobby.hits.includes(r.object))goCanteen();else target=r.point}return}
+ if(lob){const r=rc.intersectObjects([...hall.lobby.hits,...hall.lobby.floors])[0];if(r){if(hall.lobby.hits.includes(r.object))walkToCounter();else target=r.point}return}
  if(!me)return;const s=rc.intersectObjects(hall.picks)[0];if(s){const id=s.object.userData.seatId;if(!hall.taken.has(id)){if(pending)hall.setSeatHighlight(pending,0);pending=id;hall.setSeatHighlight(id,0xffb0c8);target=null;tip(`Seat ${id} selected`);buttons()}else tip(`Seat ${id} is taken`);return}
  const f=rc.intersectObjects(hall.floors)[0];if(f){if(pending){hall.setSeatHighlight(pending,0);pending=null;buttons()}target=f.point}});
 /* loop */
@@ -137,8 +134,13 @@ m.on((s,p)=>{$('chat').style.display=$('top-r').style.display=s===S.DOOR?'none':
 const clock=new THREE.Clock(),V3=new THREE.Vector3();
 renderer.setAnimationLoop(()=>{const dt=Math.min(clock.getDelta(),.05),t=clock.elapsedTime;if(document.hidden)return;
  if(me&&(m.state===S.EXPLORE||(m.state===S.DOOR&&!canteen.isOpen))&&!me.script&&!me.seated){const ix=(keys.d||keys.arrowright?1:0)-(keys.a||keys.arrowleft?1:0)+jx,iz=(keys.s||keys.arrowdown?1:0)-(keys.w||keys.arrowup?1:0)+jz;let dx=0,dz=0;
-  if(ix||iz){target=null;const fx=-Math.sin(rig.yaw),fz=-Math.cos(rig.yaw);dx=fx*-iz-fz*ix;dz=fz*-iz+fx*ix}else if(target){dx=target.x-me.pos.x;dz=target.z-me.pos.z;if(Math.hypot(dx,dz)<.15){target=null;dx=dz=0}}
-  if(!me.move(dx,dz,dt,hall))target&&!(ix||iz)&&dx===0&&(target=null)}
+  let k=1;
+  if(ix||iz){target=null;const fx=-Math.sin(rig.vy),fz=-Math.cos(rig.vy);dx=fx*-iz-fz*ix;dz=fz*-iz+fx*ix;k=Math.min(1,Math.hypot(ix,iz))}
+  else if(target){dx=target.x-me.pos.x;dz=target.z-me.pos.z;const d=Math.hypot(dx,dz);if(d<.12){target=null;dx=dz=0}else k=Math.max(.3,Math.min(1,d/1.1))}
+  me.move(dx,dz,dt,hall,k)}
+ if(me&&m.state===S.DOOR&&!me.script&&!canteen.isOpen&&!me.seated){const lx=me.pos.x,lz=me.pos.z-DOOR_Z,nearC=lz>COUNTER_Z-.7&&Math.abs(lx)<3.5;
+  if(nearC&&!atCounter){atCounter=true;target=null;me.face(0,1);canteen.open()}else if(!nearC&&lz<COUNTER_Z-1.4)atCounter=false;
+  if(lz<1.25&&Math.abs(lx)<1&&role)startEnter()}
  movie.tick(dt);const now=performance.now();if(role===1&&sync?.present&&m.state===S.WATCH&&now-lastSync>3000){lastSync=now;sync.send({t:'sync',vt:movie.time,pl:movie.playing})}
  if(movie.dur){const v=movie.time/movie.dur*1000;$('sk').value=v;$('fsk').value=v;$('tc').textContent=$('ftc').textContent=fmt(movie.time);$('td').textContent=fmt(movie.dur)}
  aud.forEach(a=>a.update(dt,t));if(me){me.update(dt,t);partner.update(dt,t);rig.ctx.me.copy(me.pos);rig.ctx.couple.copy(me.pos);if(partner.group.visible)rig.ctx.couple.add(partner.pos).multiplyScalar(.5);sync?.tick(performance.now(),me.av.walk,snap)}rig.ctx.lobbyY=floorY(DOOR_Z);rig.ctx.lobby=m.state===S.DOOR;if(m.is(S.DOOR,S.ENTER))hall.lobby.update(t);
