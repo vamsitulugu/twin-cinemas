@@ -61,8 +61,9 @@ export function makeAvatar(gltf,{height=1.7,look,hide=[],walker=false,seated=fal
  if(seated){sb.forEach(s=>s.b.quaternion.copy(s.q));hips.position.copy(hsit)}
  return av}
 /** Fill the already-taken seats with a varied crowd. Never uses the couple's avatars: 4 different people models (+ any in /models/audience), shared out evenly, each with its own skin, hair, clothes, height and face proportions. */
+export const CROWD_SHADOWS=false;   // the seated crowd is static: letting it cast shadows doubles the triangles the GPU draws for little visible gain
 export function seatAudience(scene,hall,gl){const list=[],bases=[{g:gl.ma,k:'m'},{g:gl.fa,k:'f'},{g:gl.rpm,k:'rpm'},{g:gl.fb,k:'f',gl:1},...gl.extra.f.map(g=>({g,k:'f',x:1})),...gl.extra.m.map(g=>({g,k:'m',x:1}))];
  const seats=[...hall.taken].sort(()=>Math.random()-.5);let i=Math.random()*bases.length|0;
  seats.forEach(id=>{const s=hall.seats.get(id),b=bases[i++%bases.length],look=randomLook(b.k);if(b.x)look.skin=[1,1,1];
   const a=makeAvatar(b.g,{height:look.height,seated:true,look,headScale:look.head,hide:b.k==='rpm'?[...(look.capOn?[]:['Wolf3D_Headwear']),...(look.beard?[]:['Wolf3D_Beard'])]:b.gl&&Math.random()<.5?['Wolf3D_Glasses']:[]});
-  a.group.position.copy(s.pos);a.group.rotation.y=Math.PI+(Math.random()-.5)*.12;scene.add(a.group);list.push(a)});return list}
+  a.group.position.copy(s.pos);a.group.rotation.y=Math.PI+(Math.random()-.5)*.12;if(!CROWD_SHADOWS)a.group.traverse(k=>{if(k.isMesh)k.castShadow=false});scene.add(a.group);list.push(a)});return list}

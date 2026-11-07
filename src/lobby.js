@@ -174,6 +174,7 @@ export function buildLobby(scene,{y0,DOOR_Z}){
   showTray(kinds){tray.children.slice(1).forEach(c=>tray.remove(c));const list=kinds.slice(0,8),n=list.length;list.forEach((k,i)=>{const o=(MAKE[k]||food)();o.position.x=(i-(n-1)/2)*(1.3/Math.max(n,3));o.position.z=(i%2?.1:-.08);tray.add(o)});tray.visible=n>0},
   hideTray(){tray.visible=false},
   /** house=1 full lights; lobby lights fade with the hall so they never leak light into a dark movie */
+  setOn(on){lights.forEach(([l])=>l.visible=on)},
   setLights(v){lights.forEach(([l,i])=>l.intensity=i*v);glows.forEach(m=>m.opacity=.04+.08*v)},
   update(t){pop.rotation.y=Math.sin(t*.8)*.04;for(let i=0;i<pdata.length;i++){const p=pdata[i];mt.setPosition(p[0],p[1]+Math.sin(t*3+p[3])*.012,p[2]);pop.setMatrixAt(i,mt)}pop.instanceMatrix.needsUpdate=true;
    const k=.55+.45*Math.sin(t*1.2);neonM.color.setRGB(1,.28+.12*k,.25+.1*k);scrs.forEach((s,i)=>s.material.color.setScalar(.92+.08*Math.sin(t*2+i)))}}}

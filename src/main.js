@@ -13,7 +13,7 @@ import {createStudio} from './studio.js';
 const $=id=>document.getElementById(id),wait=ms=>new Promise(r=>setTimeout(r,ms));
 const tween=(ms,f)=>new Promise(r=>{const s=performance.now();(function k(){const u=Math.min(1,(performance.now()-s)/ms);f(u*u*(3-2*u));u<1?requestAnimationFrame(k):r()})()});
 /* renderer / scene */
-const PR_MAX=Math.min(devicePixelRatio||1,matchMedia('(pointer:coarse)').matches?1.5:2),PR_MIN=.7;let pr=Math.min(PR_MAX,1.5);     // render scale: adapts to keep the frame rate smooth (see perf())
+const PR_MAX=Math.min(devicePixelRatio||1,matchMedia('(pointer:coarse)').matches?1.5:2),PR_MIN=Math.min(1,PR_MAX);let pr=PR_MAX;     // render scale: adapts to keep the frame rate smooth (see perf())
 const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});renderer.setPixelRatio(pr);renderer.setSize(innerWidth,innerHeight);
 renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.shadowMap.autoUpdate=false;renderer.shadowMap.needsUpdate=true;   // shadows are refreshed on a timer, not every frame
 renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.15;document.body.prepend(renderer.domElement);
@@ -23,7 +23,7 @@ const fit=()=>{camera.aspect=innerWidth/innerHeight;camera.fov=camera.aspect<1?7
 const hall=buildHall(scene,renderer),rig=new CameraRig(camera,renderer.domElement,{onManual:()=>setView('orbit')});
 const movie=new Movie();
 let gl;try{gl=await loadAvatars(p=>$('loading').textContent='LOADING THEATRE… '+Math.round(p*100)+'%')}catch(e){$('loading').textContent='Could not load avatars: '+e.message;throw e}
-const aud=seatAudience(scene,hall,gl),studio=createStudio(renderer,gl);studio.on=true;try{await renderer.compileAsync(scene,camera)}catch(e){}
+const aud=seatAudience(scene,hall,gl),studio=createStudio(renderer,gl);studio.on=true;try{await renderer.compileAsync(scene,camera);hall.setRoom(true);await renderer.compileAsync(scene,camera);hall.setRoom(false)}catch(e){hall.setRoom(false)}
 const spawn=(kind,h,color,x)=>{const p=new Player(makeAvatar(gl[kind],{height:h,walker:true,relaxed:true,style:kind==='cf'?'f':'m'}),color);scene.add(p.group);p.pos.set(x,floorY(DOOR_Z+1.9),DOOR_Z+1.9);p.group.rotation.y=Math.PI;return p};
 let me=null,partner=null,role=0,sync=null,partnerSeat=null,doorOpen=false;hall.lobbyMode=true;                                   // the hall starts with the couple outside, in the lobby
 let bagPrev={popcorn:false,drink:false};
@@ -47,7 +47,8 @@ const nextAngle=()=>{const v=CYCLE[(CYCLE.indexOf(view)+1)%CYCLE.length];watchVi
 const bar=$('bar'),tip=t=>$('tip').textContent=t||'';
 const HINTS=false,hint=t=>tip(HINTS?t:'');          // set HINTS=true to bring back the how-to-play lines at the top
 /* every control is an icon-only button (the name is only a tooltip / screen-reader label) */
-const tipify=el=>{if(el.title){el.dataset.tip=el.ariaLabel=el.title;el.removeAttribute('title')}};
+const tipify=el=>{if(el&&el.title){el.dataset.tip=el.ariaLabel=el.title;el.removeAttribute('title')}};
+const RAIL=[$('cb'),$('snd'),$('leave')];RAIL.forEach(tipify);   // grabbed once: bar.innerHTML='' detaches them, and $() can no longer find detached nodes
 const B=(icon,title,fn,cls)=>{const b=document.createElement('button');b.textContent=icon;b.dataset.tip=b.ariaLabel=title;b.onclick=fn;if(cls)b.className=cls;bar.appendChild(b);return b};
 function buttons(){bar.innerHTML='';const s=m.state;
  if(s===S.EXPLORE&&pending)B('🪑','Sit here',sitDown,'main');
@@ -56,12 +57,12 @@ function buttons(){bar.innerHTML='';const s=m.state;
  if(me&&m.is(S.SEATED,S.WATCH,S.PAUSED,S.BREAK))B('🍿',me.popcorn?'Put popcorn away':'Popcorn',togglePop,me.popcorn?'on':'');
  if(me&&!m.is(S.DOOR,S.ENTER,S.END)){B('❤️','Send love',()=>emote('heart'));B('👋','Wave',()=>emote('wave'));B('👏','Clap',()=>emote('clap'))}
  if([S.EXPLORE,S.SEATED,S.PAUSED,S.BREAK].includes(s))bar.appendChild(fileLabel);
- if(me&&!m.is(S.DOOR,S.ENTER)){const x=[$('cb'),$('snd'),$('leave')];x.forEach(tipify);bar.append(...x)}          // chat / alerts / leave live in the same right-hand rail
+ if(me&&!m.is(S.DOOR,S.ENTER)){bar.append(...RAIL)}          // chat / alerts / leave live in the same right-hand rail
  if(view==='full'){bar.innerHTML='';B('✕','Exit full screen',exitFull)}}
 m.on(async(s,p)=>{const ui=$('door-ui'),ov=$('ov');ui.style.display=s===S.DOOR?'flex':'none';ov.style.display='none';hall.lobbyMode=s===S.DOOR;if(s!==S.DOOR&&canteen.isOpen)canteen.close();
  if(s===S.DOOR){setView('door');tip()}
  if(s===S.ENTER){tip('');await openDoor();setView('follow',{yaw:0,pitch:.55,dist:4});hall.lobby.hideTray();await me.walk([[LX[role],DOOR_Z+1.2],[LX[role],DOOR_Z-1]]);m.go(S.EXPLORE)}
- if(s===S.EXPLORE){hint('WASD / arrows or tap the floor to walk · drag to look · tap a seat');if(p===S.SEATED)setView('follow',{pitch:.55,dist:4})}
+ if(s===S.EXPLORE){hall.setRoom(true);hint('WASD / arrows or tap the floor to walk · drag to look · tap a seat');if(p===S.SEATED)setView('follow',{pitch:.55,dist:4})}
  if(s===S.SEATED){setView('seat',{yaw:Math.PI*.15,pitch:.4,dist:3.2});hint(sync?.present?'You are seated. Start when you are both seated.':'You are seated. Start the movie when ready.')}
  if(s===S.WATCH){const first=p===S.SEATED;tip('');if(first){fade(.07,1800);await wait(500);tween(2600,u=>hall.setCurtains(u))}else fade(.07,900);if(!['orbit','full'].includes(view)||p!==S.WATCH)setView(watchView)}
  if(s===S.PAUSED){fade(.4,900);setView('couple')}
@@ -184,11 +185,11 @@ m.on((s,p)=>{$('top-r').style.display=s===S.DOOR?'none':(s===S.ENTER?'none':'fle
  joy.addEventListener('pointerdown',e=>{joy.setPointerCapture(e.pointerId);mv(e)});joy.addEventListener('pointermove',e=>{if(e.buttons||e.pressure)mv(e)});const up=()=>{jx=jz=0;kn.style.transform=''};joy.addEventListener('pointerup',up);joy.addEventListener('pointercancel',up)}
 /* ---- smoothness: adaptive render scale. Watches the real frame time; if the device can't hold ~60 fps it quietly lowers the resolution a notch
    (and raises it again when there's headroom), so walking and camera moves stay fluid on any screen. ---- */
-let fAcc=0,fN=0,calm=0,cap=PR_MAX;const applyPR=()=>{renderer.setPixelRatio(pr);renderer.setSize(innerWidth,innerHeight)};
+let fAcc=0,fN=0,calm=0,slow=0,cap=PR_MAX;const applyPR=()=>{renderer.setPixelRatio(pr);renderer.setSize(innerWidth,innerHeight)};
 function perf(raw,t){if(raw>.3||t<3){fAcc=fN=0;return}fAcc+=raw;fN++;if(fAcc<1.2)return;const fps=fN/fAcc;fAcc=fN=0;
- if(fps<48&&pr>PR_MIN+.01){cap=pr*.97;pr=Math.max(PR_MIN,pr*(fps<32?.8:.9));calm=0;applyPR()}
- else if(fps>57){calm++;if(calm>=3&&pr<cap-.01){pr=Math.min(cap,pr*1.08);calm=0;applyPR()}else if(calm>=10&&pr>=cap-.01&&cap<PR_MAX){cap=Math.min(PR_MAX,cap*1.06);calm=0}}else calm=0}
-const UI={sk:$('sk'),fsk:$('fsk'),tc:$('tc'),ftc:$('ftc'),td:$('td'),tcT:'',tdT:''};let lastUI=0,lastScr=0,shAcc=1;
+ if(fps<42&&pr>PR_MIN+.01){slow++;if(slow>=2){slow=0;cap=pr*.97;pr=Math.max(PR_MIN,pr*(fps<30?.85:.92));calm=0;applyPR()}}
+ else if(fps>57){slow=0;calm++;if(calm>=3&&pr<cap-.01){pr=Math.min(cap,pr*1.08);calm=0;applyPR()}else if(calm>=10&&pr>=cap-.01&&cap<PR_MAX){cap=Math.min(PR_MAX,cap*1.06);calm=0}}else calm=0}
+const UI={sk:$('sk'),fsk:$('fsk'),tc:$('tc'),ftc:$('ftc'),td:$('td'),tcT:'',tdT:''};let lastUI=0,lastScr=0,shAcc=1;const moving=p=>p.av.walk||p.script||p.av.wave>0||(p.av.sit>0&&p.av.sit<1);
 const clock=new THREE.Clock(),V3=new THREE.Vector3();
 renderer.setAnimationLoop(()=>{const raw=clock.getDelta(),dt=Math.min(raw,.05),t=clock.elapsedTime;if(document.hidden)return;perf(raw,t);
  if(me&&(m.state===S.EXPLORE||(m.state===S.DOOR&&!canteen.isOpen))&&!me.script&&!me.seated){const ix=(keys.d||keys.arrowright?1:0)-(keys.a||keys.arrowleft?1:0)+jx,iz=(keys.s||keys.arrowdown?1:0)-(keys.w||keys.arrowup?1:0)+jz;let dx=0,dz=0;
@@ -207,6 +208,7 @@ renderer.setAnimationLoop(()=>{const raw=clock.getDelta(),dt=Math.min(raw,.05),t
  bubbleTick(now);if(!(movie.src&&m.is(S.WATCH,S.PAUSED,S.BREAK,S.END))&&now-lastScr>66){lastScr=now;hall.drawScreen(t,m.is(S.WATCH,S.PAUSED,S.BREAK),movie.dur?movie.time/movie.dur:0)}
  rig.update(dt,t);
  if(studio.on){renderer.shadowMap.autoUpdate=true;shAcc=1;studio.render(dt,t)}
- else{renderer.shadowMap.autoUpdate=false;shAcc+=dt;if(shAcc>=(m.is(S.WATCH)?.1:1/30)){shAcc=0;renderer.shadowMap.needsUpdate=true}renderer.render(scene,camera)}
+ else{renderer.shadowMap.autoUpdate=false;shAcc+=dt;const dyn=!!me&&(moving(me)||(partner.group.visible&&moving(partner)));
+  if(m.state!==S.DOOR&&(dyn||shAcc>=(m.is(S.WATCH)?.5:.25))){shAcc=0;renderer.shadowMap.needsUpdate=true}renderer.render(scene,camera)}
  });
 await wait(300);$('loading').classList.add('off');m.go(S.DOOR);setView('door');$('door-ui').style.display='flex';addEventListener('beforeunload',()=>sync?.close());

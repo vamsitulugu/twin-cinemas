@@ -129,9 +129,10 @@ export function buildHall(scene,renderer){
  const cL=new THREE.Group(),cR=new THREE.Group();
 
  /* ---------- seats ---------- */
- const rb=(w,h,d,r,x,y,z,rx=0)=>{const g=new RoundedBoxGeometry(w,h,d,3,r);if(rx)g.rotateX(rx);g.translate(x,y,z);return g};
+ const rbs=sg=>(w,h,d,r,x,y,z,rx=0)=>{const g=new RoundedBoxGeometry(w,h,d,sg,r);if(rx)g.rotateX(rx);g.translate(x,y,z);return g};
+ const rb=rbs(2),rbd=rbs(1);   // seat bevels: 2 segments on the big cushions, 1 on the tiny frame bars (looks identical, ~5x fewer triangles per seat)
  const cushGeo=mergeGeometries([rb(.52,.13,.5,.05,0,.47,-.03),rb(.52,.8,.13,.06,0,.98,.27,.13),rb(.42,.24,.15,.06,0,1.38,.32,.13)]);
- const darkGeo=mergeGeometries([rb(.07,.07,.56,.025,-.3,.66,-.02),rb(.07,.07,.56,.025,.3,.66,-.02),rb(.06,.2,.1,.02,-.3,.54,.2),rb(.06,.2,.1,.02,.3,.54,.2),rb(.12,.42,.24,.03,0,.21,.14),rb(.1,.04,.66,.015,0,.02,0)]);
+ const darkGeo=mergeGeometries([rbd(.07,.07,.56,.025,-.3,.66,-.02),rbd(.07,.07,.56,.025,.3,.66,-.02),rbd(.06,.2,.1,.02,-.3,.54,.2),rbd(.06,.2,.1,.02,.3,.54,.2),rbd(.12,.42,.24,.03,0,.21,.14),rbd(.1,.04,.66,.015,0,.02,0)]);
  const redBase=M(0xa51d1d,{roughness:.9,bumpMap:bumpS,bumpScale:.25}),greyBase=M(0x453e3c,{roughness:.9,bumpMap:bumpS,bumpScale:.25});
  const darkParts=[],seats=new Map(),boxes=[],taken=new Set(['A3','A13','B2','B6','B13','C5','C10','C14','D3','D9','D12','E4','E12','F2','F7','F14','G3','G10','H6','H9','H13','I4','I8','I12']),picks=[];
  for(let r=0;r<NROWS;r++)for(let c=0;c<COLS;c++){
@@ -160,6 +161,8 @@ export function buildHall(scene,renderer){
   /** house=1 full lights, 0.07 movie dark */
   setLights(v){lobby.setLights(v);hemi.intensity=.06+.64*v;spot.intensity=60*v;lamps.forEach(l=>l.intensity=.7*v);bayLights.forEach(l=>l.intensity=9*v);warm.emissiveIntensity=.12+.88*v;washMats.forEach(m=>m.opacity=.1+.8*v);
    stepMat.emissiveIntensity=.5+.8*v;dlMat.color.setScalar(.2+.8*v);scene.environmentIntensity=.05+.3*v;glow.intensity=6*(1-v)},
+  /** inHall: the lobby lights are switched off once you are inside (fewer lights for the GPU to loop over every pixel) */
+  setRoom(inHall){lobby.setOn(!inHall)},
   setCurtains(o){cL.scale.x=cR.scale.x=1-.93*o},
   setSeatHighlight(id,hex){const s=seats.get(id);if(s){s.cushMat.emissive.setHex(hex||0);s.cushMat.emissiveIntensity=hex?.7:1}},
   drawScreen(t,playing,prog=0){const g=cx.createRadialGradient(SW/2,SH/2,30,SW/2,SH/2,SW*.62);
