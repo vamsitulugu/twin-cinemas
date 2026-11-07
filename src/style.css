@@ -17,7 +17,7 @@ button.main{background:linear-gradient(90deg,#e8620f,var(--accent));border:0;fon
 .hv{position:fixed;left:-9999px;width:4px;height:4px}.fullvid{position:static;width:100%;height:100%;object-fit:contain;background:#000}
 #fv{position:fixed;inset:0;z-index:10;background:#000;display:none;align-items:center;justify-content:center}.slot{position:absolute;inset:0}
 #fc{position:absolute;left:0;right:0;bottom:0;display:flex;gap:10px;align-items:center;padding:14px max(14px,env(safe-area-inset-left));background:linear-gradient(#0000,#000c);opacity:0;transition:opacity .4s;font-size:13px}#fc.show{opacity:1}
-#chat{position:fixed;top:max(38px,calc(env(safe-area-inset-top) + 28px));left:50%;transform:translateX(-50%);width:min(420px,92%);display:none;gap:6px;z-index:6}#chat input{flex:1;background:var(--panel);color:#fff;border:1px solid #3a4378;border-radius:10px;padding:9px 12px;font:inherit;font-size:14px}
+#chat{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);width:min(420px,92%);display:none;gap:6px;z-index:12}#chat input{flex:1;background:var(--panel);color:#fff;border:1px solid #3a4378;border-radius:10px;padding:9px 12px;font:inherit;font-size:14px}
 #top-r{position:fixed;top:max(8px,env(safe-area-inset-top));right:8px;z-index:6;display:none;gap:6px}
 .bubble{position:fixed;z-index:6;transform:translate(-50%,-100%);max-width:220px;padding:7px 12px;border-radius:16px;font-size:14px;color:#fff;pointer-events:none;opacity:0;transition:opacity .4s;word-break:break-word;box-shadow:0 2px 10px #0008}
 .fl{position:fixed;z-index:6;font-size:34px;pointer-events:none;animation:fl 2s ease-out forwards}@keyframes fl{from{opacity:1;transform:translate(-50%,0) scale(.8)}to{opacity:0;transform:translate(-50%,-110px) scale(1.5)}}
@@ -73,3 +73,9 @@ button{border-radius:999px}
 #st-rail{position:absolute;right:max(10px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top));display:flex;flex-direction:column;gap:10px}
 #st-rail button{width:40px;height:40px;padding:0;background:#ffffff14;border:1px solid #ffffff26;font-size:18px;border-radius:12px}#st-rail button.on{background:#f5821f;border-color:#f5821f}
 #fade{position:fixed;inset:0;background:#0b0d1c;z-index:8;opacity:0;pointer-events:none;transition:opacity .55s}#fade.on{opacity:1}
+
+/* ---------- chat: small button, subtitle-style feed while the movie plays ---------- */
+#cb{position:relative}#cb.new:after{content:"";position:absolute;top:3px;right:3px;width:9px;height:9px;border-radius:50%;background:var(--p1);box-shadow:0 0 8px var(--p1)}
+#msgs{position:fixed;left:50%;bottom:130px;transform:translateX(-50%);width:min(440px,92%);display:flex;flex-direction:column;align-items:center;gap:5px;z-index:12;pointer-events:none}
+.msg{max-width:100%;padding:6px 13px;border-radius:14px;font-size:14px;color:#fff;background:#2a7fc4d9;box-shadow:0 2px 10px #0008;word-break:break-word;transition:opacity .6s;animation:msgin .25s ease-out}
+.msg.me{background:#c2305ad9}.msg.out{opacity:0}@keyframes msgin{from{opacity:0;transform:translateY(8px)}}

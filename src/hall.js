@@ -124,7 +124,7 @@ export function buildHall(scene,renderer){
  const screenMat=new THREE.MeshBasicMaterial({map:stex,toneMapped:false}),screen=new THREE.Group();screen.position.set(0,SCREEN_Y,SCREEN_Z);scene.add(screen);
  const SIZES={std:[9.6,4.2,0],imax:[10.6,5,0],curved:[10.2,4.4,.7],mini:[6,3.2,0]};
  const plane=(w,h,c,m,z)=>{const g=new THREE.PlaneGeometry(w,h,40,1),p=g.attributes.position;for(let i=0;i<p.count;i++)p.setZ(i,c?Math.pow(p.getX(i)/5,2)*c:0);g.computeVertexNormals();const k=new THREE.Mesh(g,m);k.position.z=z;return k};
- let kind='std';const setScreen=(k,asp)=>{kind=k;let[w,h,c]=SIZES[k];if(asp){h=Math.min(4.6,10.2/asp);w=h*asp}screen.clear();screen.add(plane(w+.2,h+.2,c,new THREE.MeshBasicMaterial({color:0x1a0f0d}),-.04),plane(w,h,c,screenMat,0))};setScreen('std');
+ let kind='std',dims=[9.6,4.2];const setScreen=(k,asp)=>{kind=k;let[w,h,c]=SIZES[k];if(asp){h=Math.min(4.6,10.2/asp);w=h*asp}dims=[w,h];screen.clear();screen.add(plane(w+.2,h+.2,c,new THREE.MeshBasicMaterial({color:0x1a0f0d}),-.04),plane(w,h,c,screenMat,0))};setScreen('std');
  // curtains are gone in this theatre; the groups stay so the open/close animation is a harmless no-op
  const cL=new THREE.Group(),cR=new THREE.Group();
 
@@ -153,7 +153,7 @@ export function buildHall(scene,renderer){
  sign(0,y0+2.75,DOOR_Z-.03,Math.PI);
 
  const push=(p,r,b)=>{const cx2=cl(p.x,b.x0,b.x1),cz=cl(p.z,b.z0,b.z1),dx=p.x-cx2,dz=p.z-cz,d=Math.hypot(dx,dz);if(d<r){if(d>1e-4){p.x=cx2+dx/d*r;p.z=cz+dz/d*r}else p.z=b.z0-r}};
- const api={lobby,lobbyMode:false,seats,taken,door,screen,cL,cR,picks,floors:[flat,...treads],setScreen,fitScreen:a=>setScreen(kind,a),setScreenMap(t){screenMat.map=t||stex;screenMat.needsUpdate=true},sizes:Object.keys(SIZES),
+ const api={lobby,lobbyMode:false,dims:()=>dims,seats,taken,door,screen,cL,cR,picks,floors:[flat,...treads],setScreen,fitScreen:a=>setScreen(kind,a),setScreenMap(t){screenMat.map=t||stex;screenMat.needsUpdate=true},sizes:Object.keys(SIZES),
   setDoor(u){leaves[0].position.x=-DW/2-u*DW*.95;leaves[1].position.x=DW/2+u*DW*.95},
   /** house=1 full lights, 0.07 movie dark */
   setLights(v){lobby.setLights(v);hemi.intensity=.06+.64*v;spot.intensity=60*v;lamps.forEach(l=>l.intensity=.7*v);bayLights.forEach(l=>l.intensity=9*v);warm.emissiveIntensity=.12+.88*v;washMats.forEach(m=>m.opacity=.1+.8*v);
