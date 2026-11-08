@@ -1,5 +1,5 @@
 // Tiny synthesized sound kit (no audio files): room tone, door, chat blip, crunch, chime. Call audio.init() from a user gesture.
-let ctx,master,amb,musicGain,crowdGain,songEl=null,songsOn=false,crowdOn=false,stepFlip=0,mixT={songs:0,crowd:0},mixS=2,bgmScale=1,list=[],order=[],oi=0;
+let ctx,master,amb,musicGain,crowdGain,songEl=null,songsOn=false,crowdOn=false,stepFlip=0,mixT={songs:0,crowd:0},memeGain,memeId=0,memeCur=null,memeBuf=new Map(),duck=1,muted=false,mixS=2,bgmScale=1,list=[],order=[],oi=0;
 const env=(g,t,a,d)=>{g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(a,t+.01);g.gain.exponentialRampToValueAtTime(.0001,t+d)};
 function tone(f,d,type='sine',a=.2,t0=0,to){if(!ctx)return;const t=ctx.currentTime+t0,o=ctx.createOscillator(),g=ctx.createGain();o.type=type;o.frequency.setValueAtTime(f,t);if(to)o.frequency.exponentialRampToValueAtTime(to,t+d);env(g,t,a,d);o.connect(g).connect(master);o.start(t);o.stop(t+d+.05)}
 function burst(d,a=.3,f=3000,t0=0){if(!ctx)return;const t=ctx.currentTime+t0,n=ctx.createBufferSource(),b=ctx.createBuffer(1,ctx.sampleRate*d,ctx.sampleRate),x=b.getChannelData(0);for(let i=0;i<x.length;i++)x[i]=Math.random()*2-1;n.buffer=b;
@@ -28,9 +28,17 @@ function startSongs(urls){if(!ctx||songsOn||!urls?.length)return;songsOn=true;li
  play()}
 /* hall crowd: one seamless loop (decoded to memory so it repeats with no gap) */
 async function startCrowd(url){if(!ctx||crowdOn||!url)return;crowdOn=true;try{const buf=await ctx.decodeAudioData(await(await fetch(url)).arrayBuffer()),n=ctx.createBufferSource();n.buffer=buf;n.loop=true;n.connect(crowdGain);n.start()}catch(e){crowdOn=false;console.warn('crowd audio',e)}}
-function applyMix(){if(!ctx)return;const t=ctx.currentTime,k=Math.max(.05,mixS/3);musicGain.gain.setTargetAtTime(mixT.songs*bgmScale,t,k);crowdGain.gain.setTargetAtTime(mixT.crowd*bgmScale,t,k)}
+function applyMix(fast){if(!ctx)return;const t=ctx.currentTime,k=fast?.06:Math.max(.05,mixS/3);musicGain.gain.setTargetAtTime(mixT.songs*bgmScale*duck,t,k);crowdGain.gain.setTargetAtTime(mixT.crowd*bgmScale*duck,t,k)}
+/* ---- meme sounds: one at a time, the songs / crowd dip while one plays. Clips are downloaded + decoded on first use, then kept. ---- */
+function memeLoad(url){let p=memeBuf.get(url);if(!p){p=fetch(url).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.arrayBuffer()}).then(b=>ctx.decodeAudioData(b));p.catch(()=>memeBuf.delete(url));memeBuf.set(url,p)}return p}
+function memeStop(){memeId++;const h=memeCur;memeCur=null;duck=1;applyMix(true);if(h)try{h.stop()}catch{}}
+async function memePlay(url,onend){if(!ctx)return null;memeStop();const my=memeId;let buf;
+ try{buf=await memeLoad(url)}catch(e){console.warn('meme sound',e);return null}
+ if(my!==memeId)return null;                                          // another sound was chosen while this one was loading
+ ctx.resume();const n=ctx.createBufferSource();n.buffer=buf;n.connect(memeGain);const h={stop:()=>n.stop()};memeCur=h;duck=.3;applyMix(true);
+ n.onended=()=>{if(memeCur===h){memeCur=null;duck=1;applyMix(true)}onend?.()};n.start();return h}
 export const audio={
- init(){if(ctx){ctx.resume();return}ctx=new(window.AudioContext||window.webkitAudioContext)();master=ctx.createGain();master.gain.value=.6;master.connect(ctx.destination);musicGain=ctx.createGain();musicGain.gain.value=0;musicGain.connect(master);crowdGain=ctx.createGain();crowdGain.gain.value=0;crowdGain.connect(master);applyMix();
+ init(){if(ctx){ctx.resume();return}ctx=new(window.AudioContext||window.webkitAudioContext)();master=ctx.createGain();master.gain.value=.6;master.connect(ctx.destination);musicGain=ctx.createGain();musicGain.gain.value=0;musicGain.connect(master);crowdGain=ctx.createGain();crowdGain.gain.value=0;crowdGain.connect(master);memeGain=ctx.createGain();memeGain.gain.value=.8;memeGain.connect(master);applyMix();
   const b=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
   const n=ctx.createBufferSource();n.buffer=b;n.loop=true;const f=ctx.createBiquadFilter();f.type='lowpass';f.frequency.value=180;amb=ctx.createGain();amb.gain.value=0;n.connect(f).connect(amb).connect(master);n.start()},
  step,
@@ -44,7 +52,8 @@ export const audio={
  musicToggle(){bgmScale=bgmScale?0:1;applyMix();return !!bgmScale},
  next(){songEl&&songEl.dispatchEvent(new Event('ended'))},
  ambient(v){amb&&amb.gain.setTargetAtTime(v,ctx.currentTime,.8)},
- mute(m){if(master)master.gain.value=m?0:.6},
+ mute(m){muted=!!m;if(master)master.gain.value=m?0:.6},isMuted:()=>muted,
+ meme:memePlay,memeStop,
  door(){tone(110,.9,'sawtooth',.08,0,55);burst(.5,.12,400,.1)},
  chat(){tone(880,.12,'sine',.12);tone(1320,.14,'sine',.08,.07)},
  crunch(){for(let i=0;i<4;i++)burst(.07,.25,2500+Math.random()*2000,i*.11)},
