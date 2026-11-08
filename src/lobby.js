@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {createFrames} from './frames.js';
+import {createTVs} from './tvs.js';
 
 /* ------------------------------------------------------------------
    Lobby + canteen (outside the hall door, +z side).
@@ -87,11 +88,16 @@ export function buildLobby(scene,{y0,DOOR_Z}){
 
  /* framed movie posters = the couple's Twin Hearts library (see frames.js) */
  const frames=createFrames();
+ const tvs=createTVs({scene});
  const poster=(x,z,ry)=>{const g=new THREE.Group();g.add(new THREE.Mesh(new THREE.BoxGeometry(1.1,1.62,.1),black));const fr=frames.add(x,Y(2.35),z,ry),p=fr.plane;p.position.z=.056;g.add(p);fr.plate.position.set(0,1.04,.06);g.add(fr.plate);
   const glow=new THREE.Mesh(new THREE.PlaneGeometry(1.5,2.1),new THREE.MeshBasicMaterial({color:0xffd9a8,transparent:true,opacity:.1,blending:THREE.AdditiveBlending,depthWrite:false}));glow.position.z=.02;g.add(glow);glows.push(glow.material);
   g.position.set(x,Y(2.35),z);g.rotation.y=ry;scene.add(g)};
  [2.4,5.4,8.4,11.4].forEach(z=>{poster(-LW+.07,Z(z),Math.PI/2);poster(LW-.07,Z(z),-Math.PI/2)});
  poster(-7.4,Z(LD-.07),Math.PI);poster(7.4,Z(LD-.07),Math.PI);
+ /* wall TVs high above the posters: your Twin Hearts ad + share-with-friends / new-features / app-image slides (see tvs.js) */
+ [2.4,5.4,8.4,11.4].forEach(z=>{tvs.wall(-LW+.09,Y(4.35),Z(z),Math.PI/2,1.9);tvs.wall(LW-.09,Y(4.35),Z(z),-Math.PI/2,1.9)});
+ tvs.wall(-7.4,Y(4.35),Z(LD-.09),Math.PI,1.9);tvs.wall(7.4,Y(4.35),Z(LD-.09),Math.PI,1.9);       // back wall, above the canteen side posters
+ tvs.wall(-4.6,Y(3.7),Z(.2),0,2.4);tvs.wall(4.6,Y(3.7),Z(.2),0,2.4);                              // entrance wall, either side of the hall door
 
  /* sofas for couples along the side walls */
  const sofaM=M(0x8f1a22,{roughness:.8});
@@ -138,7 +144,7 @@ export function buildLobby(scene,{y0,DOOR_Z}){
  const kinds=['Beverages','Popcorn','Ice Cream','Beverages','Popcorn','Ice Cream'],scrs=[];
  kinds.forEach((k,i)=>{const x=-4.4+i*1.76,g=new THREE.Group();g.add(new THREE.Mesh(new THREE.BoxGeometry(1.64,.96,.1),black));
   const s=new THREE.Mesh(new THREE.PlaneGeometry(1.54,.87),new THREE.MeshBasicMaterial({map:tex(screenCanvas(k)),toneMapped:false}));s.position.z=-.056;s.rotation.y=Math.PI;g.add(s);
-  const rod=new THREE.Mesh(new THREE.CylinderGeometry(.015,.015,.6,6),black);rod.position.set(0,.77,.0);g.add(rod);hits.push(s);scrs.push(s);
+  const rod=new THREE.Mesh(new THREE.CylinderGeometry(.015,.015,.6,6),black);rod.position.set(0,.77,.0);g.add(rod);hits.push(s);scrs.push(s);tvs.menu(s);
   g.position.set(x,Y(4.35),Z(12.1));g.rotation.x=-.12;scene.add(g)});
  // neon sign above the screens
  const nsign=new THREE.Mesh(new THREE.PlaneGeometry(3,.75),new THREE.MeshBasicMaterial({map:tex(signCanvas()),transparent:true,toneMapped:false}));nsign.position.set(0,Y(5.02),backZ-.12);nsign.rotation.y=Math.PI;scene.add(nsign);
@@ -169,7 +175,7 @@ export function buildLobby(scene,{y0,DOOR_Z}){
   showTray(kinds){tray.children.slice(1).forEach(c=>tray.remove(c));const list=kinds.slice(0,8),n=list.length;list.forEach((k,i)=>{const o=(MAKE[k]||food)();o.position.x=(i-(n-1)/2)*(1.3/Math.max(n,3));o.position.z=(i%2?.1:-.08);tray.add(o)});tray.visible=n>0},
   hideTray(){tray.visible=false},
   /** house=1 full lights; lobby lights fade with the hall so they never leak light into a dark movie */
-  setOn(on){lights.forEach(([l])=>l.visible=on)},
-  setLights(v){lights.forEach(([l,i])=>l.intensity=i*v);glows.forEach(m=>m.opacity=.04+.08*v)},
+  setOn(on){lights.forEach(([l])=>l.visible=on);tvs.setOn(on)},
+  setLights(v){tvs.setLights(v);lights.forEach(([l,i])=>l.intensity=i*v);glows.forEach(m=>m.opacity=.04+.08*v)},
   update(t){frames.update(Math.min(.1,Math.max(0,t-lt)));lt=t;pop.rotation.y=Math.sin(t*.8)*.04;for(let i=0;i<pdata.length;i++){const p=pdata[i];mt.setPosition(p[0],p[1]+Math.sin(t*3+p[3])*.012,p[2]);pop.setMatrixAt(i,mt)}pop.instanceMatrix.needsUpdate=true;
-   const k=.55+.45*Math.sin(t*1.2);neonM.color.setRGB(1,.28+.12*k,.25+.1*k);scrs.forEach((s,i)=>s.material.color.setScalar(.92+.08*Math.sin(t*2+i)))}}}
+   const k=.55+.45*Math.sin(t*1.2);neonM.color.setRGB(1,.28+.12*k,.25+.1*k);tvs.update(t)}}}
