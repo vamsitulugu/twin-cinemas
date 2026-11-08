@@ -3,6 +3,8 @@
 // The session id becomes the private room code, the avatar is chosen for you (no Person 1/2 screen),
 // and the lobby shows Invite / Start for the host and a waiting message for the guest.
 // Without those params the cinema behaves exactly as before (manual room + Person 1/2).
+// e=1 means the app opened the cinema in a full-screen frame inside its own page. Then (a) the movie file you already
+// picked in Twin Hearts is handed over with postMessage (no second "choose movie"), and (b) Leave asks the app to close the frame.
 import {ONLINE} from './net.js';
 const API=(import.meta.env&&import.meta.env.VITE_API_BASE)||'https://us-app-av6d.onrender.com';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -10,7 +12,8 @@ function read(){
  try{const q=new URLSearchParams(location.hash.slice(1)),s=q.get('s'),r=+q.get('r');
   if(!UUID.test(s||'')||(r!==1&&r!==2))return null;
   let back=null;try{const u=new URL(q.get('b')||'');if(/^https?:$/.test(u.protocol))back=u.href}catch(e){}
-  const a={invited:q.get('i')==='1',session:s,slot:r,name:(q.get('n')||'').slice(0,30),couple:q.get('c')||'',user:q.get('u')||'',host:q.get('h')==='1',back};
+  let backOrigin='';try{backOrigin=new URL(back).origin}catch(e){}
+  const a={invited:q.get('i')==='1',session:s,slot:r,name:(q.get('n')||'').slice(0,30),couple:q.get('c')||'',user:q.get('u')||'',host:q.get('h')==='1',back,backOrigin,embed:q.get('e')==='1'&&window.parent!==window&&!!backOrigin};
   if(!a.couple||!/^user[12]$/.test(a.user))return null;
   history.replaceState(0,'',location.pathname+'#'+s);   // couple id never stays in the address bar / history; the room code stays
   return a}catch(e){return null}}
@@ -20,6 +23,21 @@ const post=(path,body)=>fetch(API+'/api/cinema/'+APP.session+path,{method:'POST'
 export async function fetchMovieInfo(){if(!APP)return null;
  try{const r=await fetch(API+'/api/cinema/'+APP.session+'/movie?coupleId='+encodeURIComponent(APP.couple)+'&role='+APP.user,{cache:'no-store'});return r.ok?await r.json():null}catch(e){return null}}
 export const markEnded=()=>{if(APP&&APP.host)post('/status',{status:'ended'}).catch(()=>{})};
+/* ---- embedded in the Twin Hearts app (e=1): talk to the page that holds us, only ever to/from the app's own origin ---- */
+const toApp=m=>{try{window.parent.postMessage({src:'twin-cinema',...m},APP.backOrigin)}catch(e){}};
+/** Leave to the app: closes the frame when embedded, otherwise goes to the back link. false = nothing to go back to. */
+export const leaveApp=()=>{if(!APP)return false;if(APP.embed){toApp({type:'leave'});return true}if(APP.back){location.href=APP.back;return true}return false};
+let waitFile=!!(APP&&APP.embed);                     // true until the app has answered (file or "no file") — the lobby then says "Loading your movie…" instead of asking to choose one
+/** Ask the app for the movie file it already has (the one picked on Watch Together). cb(file|null) is called once. Gives up after 8 s → the normal "choose your copy" button appears. */
+export function handshake(cb){
+ if(!APP||!APP.embed)return;
+ let done=false,tries=0;
+ const finish=f=>{if(done)return;done=true;waitFile=false;clearInterval(t);cb(f)};
+ addEventListener('message',e=>{if(e.source!==window.parent||e.origin!==APP.backOrigin)return;const d=e.data;
+  if(!d||d.src!=='twin-hearts')return;
+  if(d.type==='file'&&d.file instanceof Blob)finish(d.file);else if(d.type==='nofile')finish(null)});
+ const t=setInterval(()=>{if(done)return;if(++tries>16)return finish(null);toApp({type:'ready'})},500);   // the app might not be listening yet, so ask again
+ toApp({type:'ready'})}
 /** ctx: {sync:()=>sync|null, enter:()=>void, stat:(text)=>void, movie:()=>({info,loaded,ready,pick(file)})} */
 export function mountInvite(ctx){
  if(!APP)return;
@@ -29,9 +47,10 @@ export function mountInvite(ctx){
  let phase=APP.invited?'invited':'lobby',msg='',inviting=false,started=false,poll=null;       // phase: lobby | invited | declined | expired
  const here=()=>!!ctx.sync()?.present;
  const mv=()=>ctx.movie?.()||{};
- const needsPick=()=>{const m=mv();return m.info&&m.info.mode==='device'&&!m.loaded};
+ const needsPick=()=>{const m=mv();return m.info&&m.info.mode==='device'&&!m.loaded&&!waitFile};
  function status(){
   const m=mv();if(ONLINE&&m.info&&m.info.mode!=='none'){
+   if(m.info.mode==='device'&&!m.loaded&&waitFile)return'Loading your movie…';
    if(needsPick())return m.bad||'Choose your copy of “'+(m.info.title||'the movie')+'” (the same one you picked in Twin Hearts)';
    if(m.loaded&&!m.ready&&here())return m.bad||'Waiting for your partner to choose the movie…'}
   if(!ONLINE)return'⚠ Live sync is not set up yet (missing Supabase keys) — your partner cannot join';
@@ -49,7 +68,7 @@ export function mountInvite(ctx){
    if(!here())row.appendChild(btn(inviting?'Sending…':phase==='lobby'?'💌 Invite partner':phase==='invited'?'💌 Invite again':'💌 Send invite again',invite,true)).disabled=inviting||!ONLINE;
    else{const b=row.appendChild(btn('▶ Start movie night',start,true));const m=mv();b.disabled=!!(m.info&&m.info.mode!=='none'&&!m.ready)}
   }
-  if(APP.back){const a=document.createElement('a');a.href=APP.back;a.textContent='← Twin Hearts';a.className='inv-b';row.appendChild(a)}}
+  if(APP.back){const a=document.createElement('a');a.href=APP.back;a.textContent='← Twin Hearts';a.className='inv-b';if(APP.embed)a.onclick=e=>{e.preventDefault();markEnded();leaveApp()};row.appendChild(a)}}
  async function invite(){
   inviting=true;msg='';render();
   try{const r=await post('/invite',{});if(!r.ok)throw new Error(r.j&&r.j.error||'failed');phase='invited';watch()}

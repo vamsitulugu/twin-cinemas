@@ -185,3 +185,8 @@ body.pl #bagbtn{top:calc(max(8px,env(safe-area-inset-top)) + 54px);transition:op
 body.app #dstat{display:none}
 
 #inv label.pick{background:#ffffff18;color:#fff;border:1px solid #4a5497;border-radius:999px;padding:12px 22px;cursor:pointer}#inv label.pick input{display:none}
+
+/* landscape-only prompt (src/orient.js) */
+#rot{position:fixed;inset:0;z-index:60;display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:#0b0d1cf2;color:#fff;text-align:center;padding:24px}
+#rot .rot-i{font-size:64px;animation:rotp 1.8s ease-in-out infinite}#rot .rot-t{font-size:20px;font-weight:600}#rot small{color:var(--mute)}#rot button{margin-top:8px}
+@keyframes rotp{0%,25%{transform:rotate(0)}70%,100%{transform:rotate(-90deg)}}

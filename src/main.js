@@ -11,7 +11,8 @@ import {createCanteen} from './canteen.js';
 import {COUNTER_Z} from './lobby.js';
 import {createStudio} from './studio.js';
 import {createPlayer} from './controls.js';
-import {APP,mountInvite,markEnded,fetchMovieInfo} from './invite.js';
+import {APP,mountInvite,markEnded,fetchMovieInfo,leaveApp,handshake} from './invite.js';
+import {mountOrient} from './orient.js';
 const $=id=>document.getElementById(id),wait=ms=>new Promise(r=>setTimeout(r,ms));
 const tween=(ms,f)=>new Promise(r=>{const s=performance.now();(function k(){const u=Math.min(1,(performance.now()-s)/ms);f(u*u*(3-2*u));u<1?requestAnimationFrame(k):r()})()});
 /* renderer / scene */
@@ -69,7 +70,7 @@ m.on(async(s,p)=>{const ui=$('door-ui'),ov=$('ov');ui.style.display=s===S.DOOR?'
  if(s===S.WATCH){const first=p===S.SEATED;tip('');if(first){fade(.07,1800);await wait(500);tween(2600,u=>hall.setCurtains(u))}else fade(.07,900);if(!['orbit','full'].includes(view)||p!==S.WATCH)setView(watchView)}
  if(s===S.PAUSED){fade(.4,900);setView('couple')}
  if(s===S.BREAK){fade(1,1200);setView('couple');ov.innerHTML='☕ Break time<br><small style="font-size:14px;color:#a79ebf">Resume when you are back</small>';ov.style.display='flex'}
- if(s===S.END){fade(1,2500);setView('couple');ov.innerHTML='The End ♥';const a=document.createElement('button');a.textContent='↻ Watch again';a.className='main';a.onclick=()=>{hall.setCurtains(1);m.go(S.WATCH)};const l=document.createElement('button');l.textContent='✕ Leave theatre';l.onclick=()=>location.reload();ov.append(a,l);ov.style.display='flex'}
+ if(s===S.END){fade(1,2500);setView('couple');ov.innerHTML='The End ♥';const a=document.createElement('button');a.textContent='↻ Watch again';a.className='main';a.onclick=()=>{hall.setCurtains(1);m.go(S.WATCH)};const l=document.createElement('button');l.textContent='✕ Leave theatre';l.onclick=()=>{markEnded();sync?.close();if(!leaveApp())location.reload()};ov.append(a,l);ov.style.display='flex'}
  buttons()});
 /* ---- studio (outside the theatre, before joining) ---- */
 const stEl=$('st'),fadeEl=$('fade');stEl.style.display='block';
@@ -210,7 +211,7 @@ function togglePop(){const on=!me.popcorn;me.setPop(on);sync?.send({t:'pop',on})
 function doEmote(p,e){if(e==='wave')p.av.emote('wave');else{const ch=e==='heart'?'❤️':'👏';head.copy(p.pos);head.y+=2.2;head.project(camera);const f=document.createElement('div');f.className='fl';f.textContent=ch;f.style.left=(head.x*.5+.5)*innerWidth+'px';f.style.top=(-head.y*.5+.5)*innerHeight+'px';document.body.appendChild(f);setTimeout(()=>f.remove(),2000)}
  if(e==='heart')audio.heart()}
 function emote(e){doEmote(me,e);sync?.send({t:'emo',e})}
-function leaveTheatre(){if(confirm('Leave the theatre?')){markEnded();sync?.close();if(APP&&APP.back)location.href=APP.back;else location.reload()}}$('leave').onclick=leaveTheatre;let muted=false;function toggleAlerts(){muted=!muted;audio.mute(muted);$('snd').textContent=muted?'🔕':'🔔'}$('snd').onclick=toggleAlerts;
+function leaveTheatre(){if(confirm('Leave the theatre?')){markEnded();sync?.close();if(!leaveApp())location.reload()}}$('leave').onclick=leaveTheatre;let muted=false;function toggleAlerts(){muted=!muted;audio.mute(muted);$('snd').textContent=muted?'🔕':'🔔'}$('snd').onclick=toggleAlerts;
 m.on((s,p)=>{$('top-r').style.display=s===S.DOOR?'none':(s===S.ENTER?'none':'flex');$('joy').style.display=s===S.EXPLORE&&matchMedia('(pointer:coarse)').matches?'block':'none';
  audio.ambient(s===S.WATCH?.015:.05);if(s===S.END)audio.chime()});
 {const joy=$('joy'),kn=joy.firstElementChild,mv=e=>{const r=joy.getBoundingClientRect(),dx=e.clientX-(r.left+55),dy=e.clientY-(r.top+55),d=Math.hypot(dx,dy),k=d>45?45/d:1;kn.style.transform=`translate(${dx*k}px,${dy*k}px)`;jx=dx*k/45;jz=dy*k/45};
@@ -245,5 +246,7 @@ renderer.setAnimationLoop(()=>{const raw=clock.getDelta(),dt=Math.min(raw,.05),t
  });
 let inv=null;
 await wait(300);$('loading').classList.add('off');m.go(S.DOOR);setView('door');$('door-ui').style.display='flex';
-if(APP){await join(APP.slot);inv=mountInvite({sync:()=>sync,enter:startEnter,stat,movie:()=>({info:minfo,loaded:movie.src,ready:movieReady(),bad:badFile,pick:loadFile})});
- minfo=await fetchMovieInfo();if(minfo?.mode==='cloud')loadCloud()}   // opened from Twin Hearts: avatar + room are already decidedaddEventListener('beforeunload',()=>sync?.close());
+addEventListener('beforeunload',()=>sync?.close());
+if(APP){mountOrient();await join(APP.slot);inv=mountInvite({sync:()=>sync,enter:startEnter,stat,movie:()=>({info:minfo,loaded:movie.src,ready:movieReady(),bad:badFile,pick:loadFile})});
+ minfo=await fetchMovieInfo();if(minfo?.mode==='cloud')loadCloud();      // opened from Twin Hearts: avatar + room are already decided
+ handshake(f=>{if(f&&!movie.src)loadFile(f)})}                            // inside the app's frame: reuse the file picked on Watch Together (no second choose-movie)

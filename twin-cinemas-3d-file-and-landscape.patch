@@ -1,0 +1,139 @@
+diff --git a/src/invite.js b/src/invite.js
+index 511f22d..5823729 100644
+--- a/src/invite.js
++++ b/src/invite.js
+@@ -3,6 +3,8 @@
+ // The session id becomes the private room code, the avatar is chosen for you (no Person 1/2 screen),
+ // and the lobby shows Invite / Start for the host and a waiting message for the guest.
+ // Without those params the cinema behaves exactly as before (manual room + Person 1/2).
++// e=1 means the app opened the cinema in a full-screen frame inside its own page. Then (a) the movie file you already
++// picked in Twin Hearts is handed over with postMessage (no second "choose movie"), and (b) Leave asks the app to close the frame.
+ import {ONLINE} from './net.js';
+ const API=(import.meta.env&&import.meta.env.VITE_API_BASE)||'https://us-app-av6d.onrender.com';
+ const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+@@ -10,7 +12,8 @@ function read(){
+  try{const q=new URLSearchParams(location.hash.slice(1)),s=q.get('s'),r=+q.get('r');
+   if(!UUID.test(s||'')||(r!==1&&r!==2))return null;
+   let back=null;try{const u=new URL(q.get('b')||'');if(/^https?:$/.test(u.protocol))back=u.href}catch(e){}
+-  const a={invited:q.get('i')==='1',session:s,slot:r,name:(q.get('n')||'').slice(0,30),couple:q.get('c')||'',user:q.get('u')||'',host:q.get('h')==='1',back};
++  let backOrigin='';try{backOrigin=new URL(back).origin}catch(e){}
++  const a={invited:q.get('i')==='1',session:s,slot:r,name:(q.get('n')||'').slice(0,30),couple:q.get('c')||'',user:q.get('u')||'',host:q.get('h')==='1',back,backOrigin,embed:q.get('e')==='1'&&window.parent!==window&&!!backOrigin};
+   if(!a.couple||!/^user[12]$/.test(a.user))return null;
+   history.replaceState(0,'',location.pathname+'#'+s);   // couple id never stays in the address bar / history; the room code stays
+   return a}catch(e){return null}}
+@@ -20,6 +23,21 @@ const post=(path,body)=>fetch(API+'/api/cinema/'+APP.session+path,{method:'POST'
+ export async function fetchMovieInfo(){if(!APP)return null;
+  try{const r=await fetch(API+'/api/cinema/'+APP.session+'/movie?coupleId='+encodeURIComponent(APP.couple)+'&role='+APP.user,{cache:'no-store'});return r.ok?await r.json():null}catch(e){return null}}
+ export const markEnded=()=>{if(APP&&APP.host)post('/status',{status:'ended'}).catch(()=>{})};
++/* ---- embedded in the Twin Hearts app (e=1): talk to the page that holds us, only ever to/from the app's own origin ---- */
++const toApp=m=>{try{window.parent.postMessage({src:'twin-cinema',...m},APP.backOrigin)}catch(e){}};
++/** Leave to the app: closes the frame when embedded, otherwise goes to the back link. false = nothing to go back to. */
++export const leaveApp=()=>{if(!APP)return false;if(APP.embed){toApp({type:'leave'});return true}if(APP.back){location.href=APP.back;return true}return false};
++let waitFile=!!(APP&&APP.embed);                     // true until the app has answered (file or "no file") — the lobby then says "Loading your movie…" instead of asking to choose one
++/** Ask the app for the movie file it already has (the one picked on Watch Together). cb(file|null) is called once. Gives up after 8 s → the normal "choose your copy" button appears. */
++export function handshake(cb){
++ if(!APP||!APP.embed)return;
++ let done=false,tries=0;
++ const finish=f=>{if(done)return;done=true;waitFile=false;clearInterval(t);cb(f)};
++ addEventListener('message',e=>{if(e.source!==window.parent||e.origin!==APP.backOrigin)return;const d=e.data;
++  if(!d||d.src!=='twin-hearts')return;
++  if(d.type==='file'&&d.file instanceof Blob)finish(d.file);else if(d.type==='nofile')finish(null)});
++ const t=setInterval(()=>{if(done)return;if(++tries>16)return finish(null);toApp({type:'ready'})},500);   // the app might not be listening yet, so ask again
++ toApp({type:'ready'})}
+ /** ctx: {sync:()=>sync|null, enter:()=>void, stat:(text)=>void, movie:()=>({info,loaded,ready,pick(file)})} */
+ export function mountInvite(ctx){
+  if(!APP)return;
+@@ -29,9 +47,10 @@ export function mountInvite(ctx){
+  let phase=APP.invited?'invited':'lobby',msg='',inviting=false,started=false,poll=null;       // phase: lobby | invited | declined | expired
+  const here=()=>!!ctx.sync()?.present;
+  const mv=()=>ctx.movie?.()||{};
+- const needsPick=()=>{const m=mv();return m.info&&m.info.mode==='device'&&!m.loaded};
++ const needsPick=()=>{const m=mv();return m.info&&m.info.mode==='device'&&!m.loaded&&!waitFile};
+  function status(){
+   const m=mv();if(ONLINE&&m.info&&m.info.mode!=='none'){
++   if(m.info.mode==='device'&&!m.loaded&&waitFile)return'Loading your movie…';
+    if(needsPick())return m.bad||'Choose your copy of “'+(m.info.title||'the movie')+'” (the same one you picked in Twin Hearts)';
+    if(m.loaded&&!m.ready&&here())return m.bad||'Waiting for your partner to choose the movie…'}
+   if(!ONLINE)return'⚠ Live sync is not set up yet (missing Supabase keys) — your partner cannot join';
+@@ -49,7 +68,7 @@ export function mountInvite(ctx){
+    if(!here())row.appendChild(btn(inviting?'Sending…':phase==='lobby'?'💌 Invite partner':phase==='invited'?'💌 Invite again':'💌 Send invite again',invite,true)).disabled=inviting||!ONLINE;
+    else{const b=row.appendChild(btn('▶ Start movie night',start,true));const m=mv();b.disabled=!!(m.info&&m.info.mode!=='none'&&!m.ready)}
+   }
+-  if(APP.back){const a=document.createElement('a');a.href=APP.back;a.textContent='← Twin Hearts';a.className='inv-b';row.appendChild(a)}}
++  if(APP.back){const a=document.createElement('a');a.href=APP.back;a.textContent='← Twin Hearts';a.className='inv-b';if(APP.embed)a.onclick=e=>{e.preventDefault();markEnded();leaveApp()};row.appendChild(a)}}
+  async function invite(){
+   inviting=true;msg='';render();
+   try{const r=await post('/invite',{});if(!r.ok)throw new Error(r.j&&r.j.error||'failed');phase='invited';watch()}
+diff --git a/src/main.js b/src/main.js
+index aa27154..b2f2677 100644
+--- a/src/main.js
++++ b/src/main.js
+@@ -11,7 +11,8 @@ import {createCanteen} from './canteen.js';
+ import {COUNTER_Z} from './lobby.js';
+ import {createStudio} from './studio.js';
+ import {createPlayer} from './controls.js';
+-import {APP,mountInvite,markEnded,fetchMovieInfo} from './invite.js';
++import {APP,mountInvite,markEnded,fetchMovieInfo,leaveApp,handshake} from './invite.js';
++import {mountOrient} from './orient.js';
+ const $=id=>document.getElementById(id),wait=ms=>new Promise(r=>setTimeout(r,ms));
+ const tween=(ms,f)=>new Promise(r=>{const s=performance.now();(function k(){const u=Math.min(1,(performance.now()-s)/ms);f(u*u*(3-2*u));u<1?requestAnimationFrame(k):r()})()});
+ /* renderer / scene */
+@@ -69,7 +70,7 @@ m.on(async(s,p)=>{const ui=$('door-ui'),ov=$('ov');ui.style.display=s===S.DOOR?'
+  if(s===S.WATCH){const first=p===S.SEATED;tip('');if(first){fade(.07,1800);await wait(500);tween(2600,u=>hall.setCurtains(u))}else fade(.07,900);if(!['orbit','full'].includes(view)||p!==S.WATCH)setView(watchView)}
+  if(s===S.PAUSED){fade(.4,900);setView('couple')}
+  if(s===S.BREAK){fade(1,1200);setView('couple');ov.innerHTML='☕ Break time<br><small style="font-size:14px;color:#a79ebf">Resume when you are back</small>';ov.style.display='flex'}
+- if(s===S.END){fade(1,2500);setView('couple');ov.innerHTML='The End ♥';const a=document.createElement('button');a.textContent='↻ Watch again';a.className='main';a.onclick=()=>{hall.setCurtains(1);m.go(S.WATCH)};const l=document.createElement('button');l.textContent='✕ Leave theatre';l.onclick=()=>location.reload();ov.append(a,l);ov.style.display='flex'}
++ if(s===S.END){fade(1,2500);setView('couple');ov.innerHTML='The End ♥';const a=document.createElement('button');a.textContent='↻ Watch again';a.className='main';a.onclick=()=>{hall.setCurtains(1);m.go(S.WATCH)};const l=document.createElement('button');l.textContent='✕ Leave theatre';l.onclick=()=>{markEnded();sync?.close();if(!leaveApp())location.reload()};ov.append(a,l);ov.style.display='flex'}
+  buttons()});
+ /* ---- studio (outside the theatre, before joining) ---- */
+ const stEl=$('st'),fadeEl=$('fade');stEl.style.display='block';
+@@ -210,7 +211,7 @@ function togglePop(){const on=!me.popcorn;me.setPop(on);sync?.send({t:'pop',on})
+ function doEmote(p,e){if(e==='wave')p.av.emote('wave');else{const ch=e==='heart'?'❤️':'👏';head.copy(p.pos);head.y+=2.2;head.project(camera);const f=document.createElement('div');f.className='fl';f.textContent=ch;f.style.left=(head.x*.5+.5)*innerWidth+'px';f.style.top=(-head.y*.5+.5)*innerHeight+'px';document.body.appendChild(f);setTimeout(()=>f.remove(),2000)}
+  if(e==='heart')audio.heart()}
+ function emote(e){doEmote(me,e);sync?.send({t:'emo',e})}
+-function leaveTheatre(){if(confirm('Leave the theatre?')){markEnded();sync?.close();if(APP&&APP.back)location.href=APP.back;else location.reload()}}$('leave').onclick=leaveTheatre;let muted=false;function toggleAlerts(){muted=!muted;audio.mute(muted);$('snd').textContent=muted?'🔕':'🔔'}$('snd').onclick=toggleAlerts;
++function leaveTheatre(){if(confirm('Leave the theatre?')){markEnded();sync?.close();if(!leaveApp())location.reload()}}$('leave').onclick=leaveTheatre;let muted=false;function toggleAlerts(){muted=!muted;audio.mute(muted);$('snd').textContent=muted?'🔕':'🔔'}$('snd').onclick=toggleAlerts;
+ m.on((s,p)=>{$('top-r').style.display=s===S.DOOR?'none':(s===S.ENTER?'none':'flex');$('joy').style.display=s===S.EXPLORE&&matchMedia('(pointer:coarse)').matches?'block':'none';
+  audio.ambient(s===S.WATCH?.015:.05);if(s===S.END)audio.chime()});
+ {const joy=$('joy'),kn=joy.firstElementChild,mv=e=>{const r=joy.getBoundingClientRect(),dx=e.clientX-(r.left+55),dy=e.clientY-(r.top+55),d=Math.hypot(dx,dy),k=d>45?45/d:1;kn.style.transform=`translate(${dx*k}px,${dy*k}px)`;jx=dx*k/45;jz=dy*k/45};
+@@ -245,5 +246,7 @@ renderer.setAnimationLoop(()=>{const raw=clock.getDelta(),dt=Math.min(raw,.05),t
+  });
+ let inv=null;
+ await wait(300);$('loading').classList.add('off');m.go(S.DOOR);setView('door');$('door-ui').style.display='flex';
+-if(APP){await join(APP.slot);inv=mountInvite({sync:()=>sync,enter:startEnter,stat,movie:()=>({info:minfo,loaded:movie.src,ready:movieReady(),bad:badFile,pick:loadFile})});
+- minfo=await fetchMovieInfo();if(minfo?.mode==='cloud')loadCloud()}   // opened from Twin Hearts: avatar + room are already decidedaddEventListener('beforeunload',()=>sync?.close());
++addEventListener('beforeunload',()=>sync?.close());
++if(APP){mountOrient();await join(APP.slot);inv=mountInvite({sync:()=>sync,enter:startEnter,stat,movie:()=>({info:minfo,loaded:movie.src,ready:movieReady(),bad:badFile,pick:loadFile})});
++ minfo=await fetchMovieInfo();if(minfo?.mode==='cloud')loadCloud();      // opened from Twin Hearts: avatar + room are already decided
++ handshake(f=>{if(f&&!movie.src)loadFile(f)})}                            // inside the app's frame: reuse the file picked on Watch Together (no second choose-movie)
+diff --git a/src/orient.js b/src/orient.js
+new file mode 100644
+index 0000000..9c842a7
+--- /dev/null
++++ b/src/orient.js
+@@ -0,0 +1,12 @@
++// Landscape-only on phones when the cinema is opened from Twin Hearts.
++// Inside the app's full-screen frame the viewport is already landscape (the app turns the frame), so this stays hidden.
++// Opened on its own with the phone upright, it asks to turn the phone and, on the tap, tries fullscreen + orientation lock.
++export function mountOrient(){
++ if(!matchMedia('(pointer:coarse)').matches)return;
++ const el=document.createElement('div');el.id='rot';
++ el.innerHTML='<div class="rot-i">📱</div><div class="rot-t">Turn your phone sideways</div><small>The 3D theatre is made for landscape</small>';
++ const b=document.createElement('button');b.className='main';b.textContent='Full screen';
++ b.onclick=async()=>{try{await document.documentElement.requestFullscreen({navigationUI:'hide'});await screen.orientation.lock('landscape')}catch(e){}};
++ el.appendChild(b);document.body.appendChild(el);
++ const q=matchMedia('(orientation:portrait)'),upd=()=>{el.style.display=q.matches?'flex':'none'};
++ q.addEventListener?q.addEventListener('change',upd):q.addListener(upd);upd()}
+diff --git a/src/style.css b/src/style.css
+index 20a003a..5574c3d 100644
+--- a/src/style.css
++++ b/src/style.css
+@@ -185,3 +185,8 @@ body.pl #bagbtn{top:calc(max(8px,env(safe-area-inset-top)) + 54px);transition:op
+ body.app #dstat{display:none}
+ 
+ #inv label.pick{background:#ffffff18;color:#fff;border:1px solid #4a5497;border-radius:999px;padding:12px 22px;cursor:pointer}#inv label.pick input{display:none}
++
++/* landscape-only prompt (src/orient.js) */
++#rot{position:fixed;inset:0;z-index:60;display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:#0b0d1cf2;color:#fff;text-align:center;padding:24px}
++#rot .rot-i{font-size:64px;animation:rotp 1.8s ease-in-out infinite}#rot .rot-t{font-size:20px;font-weight:600}#rot small{color:var(--mute)}#rot button{margin-top:8px}
++@keyframes rotp{0%,25%{transform:rotate(0)}70%,100%{transform:rotate(-90deg)}}
