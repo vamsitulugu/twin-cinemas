@@ -13,7 +13,7 @@ import {COUNTER_Z,LW,LD} from './lobby.js';
 import {createLobbyCrowd} from './crowd.js';
 import {createStudio} from './studio.js';
 import {createPlayer} from './controls.js';
-import {APP,mountInvite,markEnded,fetchMovieInfo,leaveApp,handshake,fetchLibrary,canAsk,askNextMovie,listenNext} from './invite.js';
+import {APP,fetchBalance,payOrder,mountInvite,markEnded,fetchMovieInfo,leaveApp,handshake,fetchLibrary,canAsk,askNextMovie,listenNext} from './invite.js';
 import {ic,iconize,mountIcons,Heart,ArrowRight,FolderOpen} from './icons.js';mountIcons();
 import {mountOrient} from './orient.js';
 import {createMemes} from './memes.js';
@@ -41,7 +41,7 @@ const spawn=(kind,h,color,x)=>{const p=new Player(makeAvatar(gl[kind],{height:h,
 let me=null,partner=null,role=0,sync=null,partnerSeat=null,doorOpen=false;
 let inStudio=false,pHere=false,lobbyGo=false;      // app mode: the avatar banner (studio) comes first; lobbyGo = we already left it for the lobbyhall.lobbyMode=true;                                   // the hall starts with the couple outside, in the lobby
 let bagPrev={popcorn:false,drink:false};
-const canteen=createCanteen({canGift:()=>!!sync?.present,sfx:n=>audio[n]?.(),
+const canteen=createCanteen({balance:APP?fetchBalance:undefined,pay:APP?payOrder:undefined,canGift:()=>!!sync?.present,sfx:n=>audio[n]?.(),
  onBag(st){if(!me)return;if(st.popcorn!==bagPrev.popcorn){me.setPop(st.popcorn);sync?.send({t:'pop',on:st.popcorn})}if(st.drink!==bagPrev.drink)me.setDrink(st.drink);bagPrev={...st};buttons()},
  onGift:items=>sync?.send({t:'order',items}),
  onOrder:()=>crowd.orderPlaced(me?.pos.x??0),

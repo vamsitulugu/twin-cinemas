@@ -27,6 +27,12 @@ export async function fetchMovieInfo(){if(!APP)return null;
 /** The couple's Twin Hearts movie library (Movie -> Library) -> [{id,title,year,genre,posterUrl,backdropUrl,overview,rating,status}] | null if it could not be loaded */
 export async function fetchLibrary(){if(!APP)return null;
  try{const r=await fetch(API+'/api/cinema/'+APP.session+'/library?coupleId='+encodeURIComponent(APP.couple),{cache:'no-store'});if(!r.ok)return null;const j=await r.json();return Array.isArray(j.movies)?j.movies:null}catch(e){return null}}
+/** Gold Coins = the couple's Twin Hearts wallet. Only available when the cinema was opened from the app (APP set). The server prices and charges every order itself. */
+export async function fetchBalance(){if(!APP)return null;
+ try{const r=await fetch(API+'/api/cinema/'+APP.session+'/wallet?coupleId='+encodeURIComponent(APP.couple)+'&role='+APP.user,{cache:'no-store'});if(!r.ok)return null;const j=await r.json();return typeof j.balance==='number'?j.balance:null}catch(e){return null}}
+/** order = {id (one per attempt, so a double tap never pays twice), for, lines:[{id,qty,sel}]} -> {ok:true,balance} | {ok:false,error,code,balance,need} */
+export async function payOrder(o){const {ok,j}=await post('/canteen/order',{clientId:o.id,for:o.for,lines:o.lines});
+ return ok?{ok:true,balance:j.balance}:{ok:false,error:j.error,code:j.code,balance:j.balance,need:j.need}}
 export const markEnded=()=>{if(APP&&APP.host)post('/status',{status:'ended'}).catch(()=>{})};
 /* ---- embedded in the Twin Hearts app (e=1): talk to the page that holds us, only ever to/from the app's own origin ---- */
 const toApp=m=>{try{window.parent.postMessage({src:'twin-cinema',...m},APP.backOrigin)}catch(e){}};

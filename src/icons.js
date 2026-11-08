@@ -1,5 +1,5 @@
 import {createElement,Play,RotateCcw,LogOut,Cloud,FolderOpen,Mail,ArrowRight,ArrowLeft,Heart,
- Popcorn,HeartHandshake,Hand,Sparkles,Armchair,Hourglass,Clapperboard,Pause,Maximize,VolumeX,Volume1,Volume2,Coffee,DoorOpen,
+ Coins,Popcorn,HeartHandshake,Hand,Sparkles,Armchair,Hourglass,Clapperboard,Pause,Maximize,VolumeX,Volume1,Volume2,Coffee,DoorOpen,
  MessageCircle,Bell,BellOff,Send,SlidersHorizontal,Music,SkipForward,Film,X,ScanFace,Users,User,RefreshCw,Target,Search,Eye,
  Binoculars,Monitor,Building2,Smile,Laugh,Footprints,Megaphone,Smartphone,Star,TriangleAlert,Moon,PersonStanding,Video,
  PanelsTopLeft,ShoppingCart,ShoppingBasket,Gift,ChefHat,Plus,Square,ArrowLeftFromLine,ArrowRightFromLine,Layers,
@@ -52,5 +52,5 @@ export function mountIcons(){
   if(!raf)raf=requestAnimationFrame(flush)});
  mo.observe(document.body,OPT);
 }
-export {Play,RotateCcw,LogOut,Cloud,FolderOpen,Mail,ArrowRight,ArrowLeft,Heart,Popcorn,Layers,Rotate3d,Flame,HandHeart,
+export {Coins,Play,RotateCcw,LogOut,Cloud,FolderOpen,Mail,ArrowRight,ArrowLeft,Heart,Popcorn,Layers,Rotate3d,Flame,HandHeart,
  IceCreamCone,CupSoda,Sandwich,Pizza,Croissant,Donut,Cake,Candy,Lollipop,Citrus,GlassWater,Cookie,Utensils,Drumstick,Wheat,Beef,Cherry,Dessert,Milk,ChefHat,Coffee,Gift,HeartHandshake,ShoppingCart,ShoppingBasket,Film,Sparkles,Plus,X};

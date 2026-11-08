@@ -75,3 +75,13 @@ i>svg.lc,span>svg.lc,#ov>svg.lc{display:inline-block;vertical-align:-3px;margin-
 .cn-prep .big{color:var(--us-l);font-size:0}.cn-prep .big svg{width:64px;height:64px}
 .cn-prep .bar{background:rgba(194,26,139,.16)}
 .vd.v{color:#34d399}.vd.n{color:#f87171}
+
+/* ---------- Gold Coins ---------- */
+.co{display:inline-flex;align-items:center;gap:4px;color:#fbbf24;font-weight:700;white-space:nowrap}.co svg.lc{display:inline-block}
+.cn-card .p{display:inline-flex;align-items:center;gap:4px}.cn-card .p .co{color:#fff}.cn-card .p .co svg{color:#fbbf24}
+.cn-line .lp,.cn-sum.big b,.chip em,.cn-foot .main,.cn-sh-f .main{display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.chip em .co{font-size:12px}.cn-line .lp .co{color:var(--us-pink)}
+.cn-bal{display:inline-flex;align-items:center;gap:6px;font-style:normal;padding:6px 12px;border-radius:999px;background:rgba(251,191,36,.10);border:1px solid rgba(251,191,36,.35);color:#fbbf24;white-space:nowrap}
+.cn-bal i{font-style:normal;font-size:12.5px;color:#fde9a6}.cn-bal strong{font-size:15px;color:#fbbf24}
+.hint.warn{color:#fbbf24;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);border-radius:14px;padding:10px 12px;margin:12px 0;line-height:1.4}
+@media(max-width:520px){.cn-head span{display:none}}

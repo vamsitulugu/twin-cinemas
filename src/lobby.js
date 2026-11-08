@@ -38,7 +38,7 @@ function screenCanvas(kind){const w=512,h=288,c=mk(w,h),x=c.getContext('2d');
 function boardCanvas(){const w=640,h=300,c=mk(w,h),x=c.getContext('2d');x.fillStyle='#0d0d0d';x.fillRect(0,0,w,h);x.strokeStyle='#d6a24a';x.lineWidth=3;x.strokeRect(8,8,w-16,h-16);
  const cols=[['SNACKS',['Nachos','Fries','Burgers','Hot Dogs','Pizza']],['DRINKS',['Cola','Shakes','Iced Tea','Lime Soda','Water']],['HOT',['Coffee','Chai','Latte','Cocoa','Green Tea']],['SWEET',['Ice Cream','Brownies','Churros','Donuts','Waffles']]];
  cols.forEach(([t,l],i)=>{const cx=20+i*154;x.fillStyle='#ffd37a';x.font='bold 24px system-ui';x.textAlign='left';x.fillText(t,cx,52);x.fillStyle='#f4efe6';x.font='19px system-ui';l.forEach((s,k)=>x.fillText(s,cx,92+k*34))});
- x.fillStyle='#ff6a82';x.font='bold 22px system-ui';x.textAlign='center';x.fillText('♥  COUPLE COMBOS FROM ₹399  ♥',w/2,h-22);return c}
+ x.fillStyle='#ff6a82';x.font='bold 22px system-ui';x.textAlign='center';x.fillText('♥  COUPLE COMBOS FROM 40 COINS  ♥',w/2,h-22);return c}
 function standCanvas(){const w=256,h=448,c=mk(w,h),x=c.getContext('2d'),g=x.createLinearGradient(0,0,0,h);g.addColorStop(0,'#5a1d7a');g.addColorStop(1,'#2a0c40');x.fillStyle=g;x.fillRect(0,0,w,h);x.strokeStyle='#ffc93c';x.lineWidth=8;x.strokeRect(6,6,w-12,h-12);
  x.fillStyle='#ffc93c';x.beginPath();for(let i=0;i<10;i++){const a=i*Math.PI/5-Math.PI/2,r=i%2?42:96;x.lineTo(w/2+Math.cos(a)*r,150+Math.sin(a)*r)}x.closePath();x.fill();
  x.fillStyle='#b3121c';x.textAlign='center';x.font='bold 34px Georgia,serif';x.fillText('DATE',w/2,142);x.fillText('NIGHT',w/2,180);
