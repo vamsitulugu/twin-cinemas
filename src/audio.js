@@ -1,13 +1,17 @@
 // Tiny synthesized sound kit (no audio files): room tone, door, chat blip, crunch, chime. Call audio.init() from a user gesture.
-let ctx,master,amb,murG,musicGain,crowdGain,songEl=null,songsOn=false,crowdOn=false,stepFlip=0,stepBufs=[],stepIx=0,mixT={songs:0,crowd:0},memeGain,memeId=0,memeCur=null,memeBuf=new Map(),duck=1,muted=false,mixS=2,bgmScale=1,list=[],order=[],oi=0;
+let ctx,master,amb,murG,musicGain,crowdGain,songEl=null,songsOn=false,crowdOn=false,stepFlip=0,fxBus,songBus,ambBus,vol=loadVol(),stepBufs=[],stepIx=0,mixT={songs:0,crowd:0},memeGain,memeId=0,memeCur=null,memeBuf=new Map(),duck=1,muted=false,mixS=2,bgmScale=1,list=[],order=[],oi=0;
+
+/* ---- user volume (the 🎚 button): master, songs, crowd + room ambience, effects (steps, doors, popcorn, memes). Saved on this device. ---- */
+function loadVol(){const d={master:1,songs:1,amb:1,fx:1};try{const j=JSON.parse(localStorage.getItem('cin_vol')||'{}');for(const k in d)if(typeof j[k]==='number')d[k]=Math.max(0,Math.min(1,j[k]))}catch{}return d}
+function applyVol(){if(!ctx)return;const t=ctx.currentTime;master.gain.setTargetAtTime(muted?0:.6*vol.master,t,.03);songBus.gain.setTargetAtTime(vol.songs,t,.03);ambBus.gain.setTargetAtTime(vol.amb,t,.03);fxBus.gain.setTargetAtTime(vol.fx,t,.03)}
 const env=(g,t,a,d)=>{g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(a,t+.01);g.gain.exponentialRampToValueAtTime(.0001,t+d)};
-function tone(f,d,type='sine',a=.2,t0=0,to){if(!ctx)return;const t=ctx.currentTime+t0,o=ctx.createOscillator(),g=ctx.createGain();o.type=type;o.frequency.setValueAtTime(f,t);if(to)o.frequency.exponentialRampToValueAtTime(to,t+d);env(g,t,a,d);o.connect(g).connect(master);o.start(t);o.stop(t+d+.05)}
+function tone(f,d,type='sine',a=.2,t0=0,to){if(!ctx)return;const t=ctx.currentTime+t0,o=ctx.createOscillator(),g=ctx.createGain();o.type=type;o.frequency.setValueAtTime(f,t);if(to)o.frequency.exponentialRampToValueAtTime(to,t+d);env(g,t,a,d);o.connect(g).connect(fxBus);o.start(t);o.stop(t+d+.05)}
 function burst(d,a=.3,f=3000,t0=0){if(!ctx)return;const t=ctx.currentTime+t0,n=ctx.createBufferSource(),b=ctx.createBuffer(1,ctx.sampleRate*d,ctx.sampleRate),x=b.getChannelData(0);for(let i=0;i<x.length;i++)x[i]=Math.random()*2-1;n.buffer=b;
- const fl=ctx.createBiquadFilter();fl.type='bandpass';fl.frequency.value=f;const g=ctx.createGain();env(g,t,a,d);n.connect(fl).connect(g).connect(master);n.start(t)}
+ const fl=ctx.createBiquadFilter();fl.type='bandpass';fl.frequency.value=f;const g=ctx.createGain();env(g,t,a,d);n.connect(fl).connect(g).connect(fxBus);n.start(t)}
 
 /* ---- footsteps: synthesized, two surfaces. vol 0..1 (use distance for your partner), surface 'floor' (lobby) | 'carpet' (hall) ---- */
 function stepSynth(surface='carpet',vol=1){if(!ctx||vol<=.01)return;const t=ctx.currentTime,fl=surface==='floor',side=(stepFlip^=1)?1:.93,j=.9+Math.random()*.2;
- const g=ctx.createGain();g.gain.value=vol*(fl?.5:.32);g.connect(master);
+ const g=ctx.createGain();g.gain.value=vol*(fl?.5:.32);g.connect(fxBus);
  // thump: a very short low tone (the heel)
  const o=ctx.createOscillator(),og=ctx.createGain();o.type='sine';o.frequency.setValueAtTime((fl?150:110)*side*j,t);o.frequency.exponentialRampToValueAtTime(48,t+.09);
  og.gain.setValueAtTime(0,t);og.gain.linearRampToValueAtTime(.9,t+.006);og.gain.exponentialRampToValueAtTime(.0001,t+.11);o.connect(og).connect(g);o.start(t);o.stop(t+.14);
@@ -45,7 +49,7 @@ async function loadSteps(){
 function stepSample(surface,vol){
  const t=ctx.currentTime,b=stepBufs[stepIx++%stepBufs.length],src=ctx.createBufferSource(),g=ctx.createGain();src.buffer=b;
  src.playbackRate.value=stepBufs.length>1?1:(stepIx&1?.97:1.03);   // one-step file: alternate pitch a little so left and right differ
- g.gain.value=Math.min(1,vol)*(surface==='floor'?1:.9);src.connect(g).connect(master);src.start(t)}
+ g.gain.value=Math.min(1,vol)*(surface==='floor'?1:.9);src.connect(g).connect(fxBus);src.start(t)}
 function step(surface='carpet',vol=1){if(!ctx||vol<=.01)return;stepBufs.length?stepSample(surface,vol):stepSynth(surface,vol)}
 /* playlist: shuffled on every page load (never starts with the song that played last time), then plays on to the next song by itself, reshuffling after the last one */
 function shuffle(n){const a=[...Array(n).keys()];for(let i=n-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a}
@@ -73,9 +77,9 @@ async function memePlay(url,onend){if(!ctx)return null;memeStop();const my=memeI
  ctx.resume();const n=ctx.createBufferSource();n.buffer=buf;n.connect(memeGain);const h={stop:()=>n.stop()};memeCur=h;duck=.3;applyMix(true);
  n.onended=()=>{if(memeCur===h){memeCur=null;duck=1;applyMix(true)}onend?.()};n.start();return h}
 export const audio={
- init(){if(ctx){ctx.resume();return}ctx=new(window.AudioContext||window.webkitAudioContext)();master=ctx.createGain();master.gain.value=.6;master.connect(ctx.destination);musicGain=ctx.createGain();musicGain.gain.value=0;musicGain.connect(master);crowdGain=ctx.createGain();crowdGain.gain.value=0;crowdGain.connect(master);memeGain=ctx.createGain();memeGain.gain.value=.8;memeGain.connect(master);applyMix();loadSteps();
+ init(){if(ctx){ctx.resume();return}ctx=new(window.AudioContext||window.webkitAudioContext)();master=ctx.createGain();master.gain.value=muted?0:.6*vol.master;master.connect(ctx.destination);fxBus=ctx.createGain();fxBus.gain.value=vol.fx;fxBus.connect(master);songBus=ctx.createGain();songBus.gain.value=vol.songs;songBus.connect(master);ambBus=ctx.createGain();ambBus.gain.value=vol.amb;ambBus.connect(master);musicGain=ctx.createGain();musicGain.gain.value=0;musicGain.connect(songBus);crowdGain=ctx.createGain();crowdGain.gain.value=0;crowdGain.connect(ambBus);memeGain=ctx.createGain();memeGain.gain.value=.8;memeGain.connect(fxBus);applyMix();loadSteps();
   const b=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
-  const n=ctx.createBufferSource();n.buffer=b;n.loop=true;const f=ctx.createBiquadFilter();f.type='lowpass';f.frequency.value=180;amb=ctx.createGain();amb.gain.value=0;n.connect(f).connect(amb).connect(master);n.start()},
+  const n=ctx.createBufferSource();n.buffer=b;n.loop=true;const f=ctx.createBiquadFilter();f.type='lowpass';f.frequency.value=180;amb=ctx.createGain();amb.gain.value=0;n.connect(f).connect(amb).connect(ambBus);n.start()},
  step,
  /** songs: array of urls (the lobby playlist). Call after audio.init(), from a tap. Safe to call again. */
  music(urls){startSongs(urls);songEl?.paused&&songEl.src&&songEl.play().catch(()=>{})},
@@ -87,7 +91,9 @@ export const audio={
  musicToggle(){bgmScale=bgmScale?0:1;applyMix();return !!bgmScale},
  next(){songEl&&songEl.dispatchEvent(new Event('ended'))},
  ambient(v){amb&&amb.gain.setTargetAtTime(v,ctx.currentTime,.8)},
- mute(m){muted=!!m;if(master)master.gain.value=m?0:.6},isMuted:()=>muted,
+ mute(m){muted=!!m;if(master)master.gain.value=m?0:.6*vol.master},
+ /** user volume 0..1 per layer: audio.volume('songs',.4) ; audio.volumes() -> {master,songs,amb,fx} */
+ volume(k,v){if(!(k in vol))return;vol[k]=Math.max(0,Math.min(1,+v||0));try{localStorage.setItem('cin_vol',JSON.stringify(vol))}catch{}applyVol()},volumes:()=>({...vol}),isMuted:()=>muted,
  meme:memePlay,memeStop,memePrefetch,state:()=>ctx?ctx.state:'none',
  door(){tone(110,.9,'sawtooth',.08,0,55);burst(.5,.12,400,.1)},
  chat(){tone(880,.12,'sine',.12);tone(1320,.14,'sine',.08,.07)},
@@ -99,7 +105,7 @@ export const audio={
  ching(){tone(2093,.6,'sine',.07);tone(2637,.5,'sine',.05,.07)},
  murmur(v){if(!ctx)return;if(!murG){const b=ctx.createBuffer(1,ctx.sampleRate*3,ctx.sampleRate),d=b.getChannelData(0);let y=0;for(let i=0;i<d.length;i++){y=y*.92+(Math.random()*2-1)*.08;d[i]=y*3}
    const n=ctx.createBufferSource();n.buffer=b;n.loop=true;const f=ctx.createBiquadFilter();f.type='bandpass';f.frequency.value=520;f.Q.value=.5;
-   const lfo=ctx.createOscillator(),lg=ctx.createGain();lfo.frequency.value=.23;lg.gain.value=.012;murG=ctx.createGain();murG.gain.value=0;lfo.connect(lg).connect(murG.gain);lfo.start();n.connect(f).connect(murG).connect(master);n.start()}
+   const lfo=ctx.createOscillator(),lg=ctx.createGain();lfo.frequency.value=.23;lg.gain.value=.012;murG=ctx.createGain();murG.gain.value=0;lfo.connect(lg).connect(murG.gain);lfo.start();n.connect(f).connect(murG).connect(ambBus);n.start()}
   murG.gain.setTargetAtTime(v,ctx.currentTime,.7)},
  add(){tone(740,.08,'sine',.1);tone(990,.1,'sine',.08,.06)},
  bell(){tone(1568,.9,'sine',.12);tone(2093,.7,'sine',.06,.01)},

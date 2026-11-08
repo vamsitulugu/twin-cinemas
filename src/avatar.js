@@ -85,13 +85,14 @@ export function makeAvatar(gltf,{height=1.7,look,hide=[],walker=false,seated=fal
   const sp=av.speak,s1=sn(t*2.1+seed),s2=sn(t*3.3+seed*1.7),s3=sn(t*5.1+seed);
   CB.forEach(b=>b.quaternion.copy(SB.get(b)));                                   // start from the seated pose
   B.Head.quaternion.copy(headQ).multiply(yq.setFromAxisAngle(YA,sn(t*.6+seed)*.3*(1-cw)));
-  if(sp){                                                                         // hands talk
-   const f=av.gest==='talk2'?ACT.talk2:ACT.talk;f(t*(.85+.25*s2));
-  }
+  if(sp){                                                                         // hands: slow, small, simple. The forearm lifts a little while a sentence is going and rests again between sentences
+   const e=.5+.5*sn(t*.42+seed*2),w=sn(t*.75+seed),w2=sn(t*.6+seed*1.3+1.7),up=.15+.3*e*(.6+.4*w);
+   arm('Right',.2,-.82+.05*w,.38,-.12+.07*w2,up,.9);
+   if(av.gest==='talk2')arm('Left',.2,-.84+.04*w2,.36,-.12+.06*w,.12+.26*e*(.6+.4*w2),.9)}
   const g=Math.max(-1.1,Math.min(1.1,gz));
   rotW(B.Spine2,.02*s1,g*.22,0);                                                  // shoulders turn a little toward the other person
-  const nod=sp?(.07+.06*Math.max(0,s3))*sn(t*4.2+seed)+.04*Math.max(0,sn(t*1.4+seed)):.1*Math.max(0,sn(t*1.1+seed))*Math.max(0,sn(t*.37+seed));   // speaker: rhythm nods; listener: slow agreeing nods
-  rotW(B.Neck,nod*.4,g*.35,(sp?.03:.05)*s1);rotW(B.Head,nod*.6,g*.5,(sp?.03:.05)*s2);
+  const nod=sp?.045*sn(t*1.7+seed)+.03*Math.max(0,sn(t*.8+seed)):.08*Math.max(0,sn(t*.9+seed))*Math.max(0,sn(t*.37+seed));   // speaker: rhythm nods; listener: slow agreeing nods
+  rotW(B.Neck,nod*.4,g*.35,(sp?.02:.04)*s1);rotW(B.Head,nod*.6,g*.5,(sp?.02:.04)*s2);
   CB.forEach((b,i)=>{CQ[i].copy(b.quaternion);b.quaternion.copy(SB.get(b)).slerp(CQ[i],cw)});   // blend with the seated pose
   return true};
  let lastPose=-1;const av={group,sit:seated?1:0,walk:0,amp:0,ph:0,wave:0,act:'',talk:0,tly:0,tlp:0,wear,speak:false,listen:false,gaze:0,gest:'talk',emote(n){if(n==='wave')av.wave=2.2},

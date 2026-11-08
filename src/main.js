@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {buildHall,floorY,DOOR_Z} from './hall.js';
 import {CameraRig,VIEWS} from './camera.js';
 import {Player} from './player.js';
+import {createVolume} from './volume.js';
 import {loadAvatars,makeAvatar,seatAudience,seatedChatter} from './avatar.js';
 import {createMachine,S} from './state.js';
 import {createSync,ONLINE} from './net.js';
@@ -26,7 +27,7 @@ const scene=new THREE.Scene();scene.background=new THREE.Color(0x0a0605);
 const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,.1,80);
 const fit=()=>{camera.aspect=innerWidth/innerHeight;camera.fov=camera.aspect<1?78:55;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)};fit();addEventListener('resize',fit);
 const hall=buildHall(scene,renderer),rig=new CameraRig(camera,renderer.domElement,{onManual:()=>setView('orbit')});
-const movie=new Movie();
+const movie=new Movie();const vol=createVolume({audio,movie});
 let gl;try{gl=await loadAvatars(p=>$('loading').textContent='LOADING THEATRE… '+Math.round(p*100)+'%')}catch(e){$('loading').textContent='Could not load avatars: '+e.message;throw e}
 const aud=seatAudience(scene,hall,gl),chatter=seatedChatter(aud),studio=createStudio(renderer,gl);studio.on=true;try{await renderer.compileAsync(scene,camera);hall.setRoom(true);await renderer.compileAsync(scene,camera);hall.setRoom(false)}catch(e){hall.setRoom(false)}
 /* the lobby crowd: canteen sellers, queues, friends chatting. Only exists (and only costs anything) while the couple is in the lobby. The counter itself is left out of the obstacles so the sellers can stand behind it. */
@@ -110,7 +111,7 @@ async function partnerSit(id){const seat=hall.seats.get(id);if(!seat||!partner||
  if(m.is(S.DOOR,S.ENTER)||partner.pos.z>DOOR_Z+.1)partner.snapSit(seat);else{await partner.walk(hall.route(partner.pos,seat));await partner.sit(seat)}buttons()}
 async function partnerStand(){const s=partnerSeat;if(!s)return;partnerSeat=null;hall.taken.delete(s.id);hall.setSeatHighlight(s.id,0);await partner.stand(s);partner.busy=false;buttons()}
 const snap=()=>({x:me.pos.x,z:me.pos.z,r:me.group.rotation.y,w:me.av.walk?1:0,s:mySeat?.id||null,pc:me.popcorn?1:0,dr:me.drink?1:0});
-async function join(r){if(role)return;role=r;leaveStudio();audio.init();audio.music(SONGS);audio.crowd(CROWD);audio.mix(MIX.out,2);crowd.active&&audio.murmur(.08);$('door-ui').classList.add('joined');const code=$('room').value.trim()||location.hash.slice(1)||'lobby';history.replaceState(0,'','#'+code);
+async function join(r){if(role)return;role=r;leaveStudio();audio.init();vol.show();audio.music(SONGS);audio.crowd(CROWD);audio.mix(MIX.out,2);crowd.active&&audio.murmur(.08);$('door-ui').classList.add('joined');const code=$('room').value.trim()||location.hash.slice(1)||'lobby';history.replaceState(0,'','#'+code);
  document.querySelectorAll('#roles button').forEach(b=>b.classList.toggle('on',+b.dataset.r===r));$('room').disabled=true;stat('Connecting…');
  const mk=q=>{const[k,h]=KIND[q],p=spawn(k,h,COL[q],LX[q]);p.onStep=stepSfx;return p};me=mk(r);partner=mk(3-r);partner.group.visible=false;
  setView('follow',{yaw:0,pitch:.5,dist:4.5});canteen.showBag(true);hint(LOBBY_TIP);
@@ -190,7 +191,7 @@ const pl=createPlayer({movie,fmt,
  mute:{get:()=>movie.muted,set:v=>{movie.muted=v}},
  more:()=>[['🎥 Next camera · '+viewLabel(),nextAngle],['🪟 Choose a view',openViews],
   [m.state===S.BREAK?'▶ End the break':'☕ Take a break',()=>m.go(m.state===S.BREAK?S.WATCH:S.BREAK)],
-  ['🍿 '+(me?.popcorn?'Put popcorn away':'Popcorn'),togglePop],[muted?'🔔 Alerts on':'🔕 Alerts off',toggleAlerts],['🎵 Music on/off',()=>audio.musicToggle()],['⏭ Next song',()=>audio.next()],['🚪 Leave theatre',leaveTheatre]],
+  ['🍿 '+(me?.popcorn?'Put popcorn away':'Popcorn'),togglePop],[muted?'🔔 Alerts on':'🔕 Alerts off',toggleAlerts],['🎚 Sound mixer',()=>vol.toggle()],['🎵 Music on/off',()=>audio.musicToggle()],['⏭ Next song',()=>audio.next()],['🚪 Leave theatre',leaveTheatre]],
  reactions:()=>[['❤️','Send love',()=>emote('heart')],['👋','Wave',()=>emote('wave')],['👏','Clap',()=>emote('clap')],['🍿',me?.popcorn?'Put popcorn away':'Popcorn',togglePop]],
  log:()=>chatLog,extra:fileLabel,
  hooks:{message:()=>toggleChat()}});                                // voice / video: not built yet, the player shows "coming soon"
