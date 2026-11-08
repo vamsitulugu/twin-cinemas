@@ -13,7 +13,7 @@ import {COUNTER_Z,LW,LD} from './lobby.js';
 import {createLobbyCrowd} from './crowd.js';
 import {createStudio} from './studio.js';
 import {createPlayer} from './controls.js';
-import {APP,mountInvite,markEnded,fetchMovieInfo,leaveApp,handshake,fetchLibrary} from './invite.js';
+import {APP,mountInvite,markEnded,fetchMovieInfo,leaveApp,handshake,fetchLibrary,canAsk,askNextMovie,listenNext} from './invite.js';
 import {mountOrient} from './orient.js';
 import {createMemes} from './memes.js';
 const $=id=>document.getElementById(id),wait=ms=>new Promise(r=>setTimeout(r,ms));
@@ -85,7 +85,7 @@ m.on(async(s,p)=>{const ui=$('door-ui'),ov=$('ov');ui.style.display=s===S.DOOR?'
  if(s===S.WATCH){const first=p===S.SEATED;tip('');if(first){fade(.07,1800);await wait(500);tween(2600,u=>hall.setCurtains(u))}else fade(.07,900);if(!['orbit','full'].includes(view)||p!==S.WATCH)setView(watchView)}
  if(s===S.PAUSED){fade(.4,900);setView('couple')}
  if(s===S.BREAK){fade(1,1200);setView('couple');ov.innerHTML='☕ Break time<br><small style="font-size:14px;color:#a79ebf">Resume when you are back</small>';ov.style.display='flex'}
- if(s===S.END){fade(1,2500);setView('couple');ov.innerHTML='The End ♥';const a=document.createElement('button');a.textContent='↻ Watch again';a.className='main';a.onclick=()=>{hall.setCurtains(1);m.go(S.WATCH)};const l=document.createElement('button');l.textContent='✕ Leave theatre';l.onclick=()=>{markEnded();sync?.close();if(!leaveApp())location.reload()};ov.append(a,l);ov.style.display='flex'}
+ if(s===S.END){fade(1,2500);setView('couple');endOverlay()}
  buttons()});
 /* ---- studio (outside the theatre, before joining) ---- */
 const stEl=$('st'),fadeEl=$('fade');stEl.style.display='block';
@@ -110,7 +110,7 @@ function mvCard(mv){const id=mv?mv.id:null;if(id===mvId)return;mvId=id;mvc.class
  const b=el('div','mv-b');b.appendChild(el('h3',0,mv.title));
  const meta=[mv.year,mv.genre].filter(Boolean).join(' · ');if(meta)b.appendChild(el('div','mv-m',meta));
  const r=el('div','mv-r');if(mv.rating!=null&&mv.rating!=='')r.appendChild(el('span','mv-s','★ '+(+Number(mv.rating).toFixed(1))+(mv.max?'/'+mv.max:'')));if(mv.fav)r.appendChild(el('span','mv-s','⭐ Favourite'));if(STAT[mv.status])r.appendChild(el('span','mv-t',STAT[mv.status]));if(OWN[mv.owner])r.appendChild(el('span','mv-o',OWN[mv.owner]));if(r.children.length)b.appendChild(r);
- b.appendChild(el('p',0,mv.overview||'No review or description yet.'));mvc.appendChild(b)}
+ b.appendChild(el('p',0,mv.overview||'No review or description yet.'));if(APP)b.appendChild(movieBtns(mv.title,'Watch a different movie'));mvc.appendChild(b)}
 /* actions */
 let blocked=false,atCounter=false;
 const startEnter=()=>{if(blocked||m.state!==S.DOOR)return;audio.ambient(.05);m.go(S.ENTER)};
@@ -152,10 +152,37 @@ const same=(a,b)=>a&&b&&(APP||a.size===b.size)&&Math.abs(a.dur-b.dur)<(APP?4:2);
 const checkMeta=()=>{if(movie.meta&&partnerMeta)tip(same(movie.meta,partnerMeta)?'Both of you have the same movie ♥':'Heads up: your partner picked a different file, so you will not see the same movie');else if(movie.meta&&sync?.present)tip('Waiting for your partner to choose the same movie file')};
 function onMsg(q){if(q.t==='ctl'){if(Math.abs(movie.time-q.vt)>.5)movie.seek(q.vt);applying=true;m.go(q.s);applying=false}
  else if(q.t==='seek')movie.seek(q.vt);else if(q.t==='sync'){if(role===2&&m.state===S.WATCH&&q.pl)movie.correct(q.vt)}
- else if(q.t==='meta'){partnerMeta=q.meta;if(partnerMeta)checkMeta()}
+ else if(q.t==='meta'){partnerMeta=q.meta;if(partnerMeta)checkMeta();if(m.state===S.END)endOverlay()}else if(q.t==='next')partnerNext(q)
  else if(q.t==='chat'){show(partner,q.x);audio.chat()}else if(q.t==='pop')partner.setPop(q.on),buttons();else if(q.t==='emo')doEmote(partner,q.e);else if(q.t==='order')canteen.receive(q.items||[]);else if(q.t==='lobby'&&APP)toLobby(true);else if(q.t==='go'&&APP){toLobby(true);inv?.onGo()}else if(q.t==='meme')memes?.remote(q.id,q.p)}
 const fileLabel=document.createElement('label');fileLabel.className='btn';fileLabel.innerHTML='🎞<input type="file" accept="video/*">';fileLabel.dataset.tip=fileLabel.ariaLabel='Choose movie file';
-let minfo=null,badFile='';
+let minfo=null,badFile='',nextTitle=null;       // nextTitle: a different movie was chosen after / before this one (null = still the first movie)
+/* two buttons that open the Twin Hearts app's own movie picker (device / cloud); outside the app frame only the local file button exists */
+function movieBtns(title,label){const w=document.createElement('div');w.className='nx';
+ if(label){const t=document.createElement('small');t.textContent=label;w.appendChild(t)}
+ const r=document.createElement('div');r.className='nx-r';w.appendChild(r);
+ const mk=(txt,fn)=>{const b=document.createElement('button');b.textContent=txt;b.onclick=e=>{e.stopPropagation();fn()};r.appendChild(b)};
+ if(canAsk()){mk('🎞 From device',()=>askNextMovie('device',title));mk('☁️ From cloud',()=>askNextMovie('cloud',title))}
+ else{const l=document.createElement('label');l.className='nxl';l.innerHTML='🎞 From device<input type="file" accept="video/*">';l.querySelector('input').onchange=e=>{const f=e.target.files[0];if(f)adoptNext({kind:'file',file:f})};r.appendChild(l)}
+ return w}
+function endOverlay(){const ov=$('ov');if(m.state!==S.END)return;ov.textContent='';
+ const h=document.createElement('div');h.textContent='The End ♥';ov.appendChild(h);
+ const nxt=nextTitle!==null,a=document.createElement('button');a.className='main';
+ a.textContent=nxt?'▶ Play '+(nextTitle?'“'+nextTitle+'”':'the next movie'):'↻ Watch again';a.onclick=()=>{hall.setCurtains(1);m.go(S.WATCH)};
+ if(nxt&&!movieReady()){a.disabled=true;const w=document.createElement('small');w.textContent=movie.src?'Waiting for your partner to have the movie…':'Choose your copy of the movie to play it together';ov.append(a,w)}else ov.appendChild(a);
+ if(APP)ov.appendChild(movieBtns('','Choose next movie'));
+ const l=document.createElement('button');l.textContent='✕ Leave theatre';l.onclick=()=>{markEnded();sync?.close();if(!leaveApp())location.reload()};ov.appendChild(l);ov.style.display='flex'}
+/** a new movie came back from the app (you picked it): tell your partner, then load it. Works at the end screen and in the lobby. */
+async function adoptNext(r){if(r.kind==='cancel')return;partnerMeta=null;badFile='';
+ if(canAsk()){const f=await fetchMovieInfo();if(f)minfo=f}else minfo={mode:'device',title:'',dur:0};
+ nextTitle=minfo?.title||'';sync?.send({t:'next',title:nextTitle});
+ if(r.kind==='file')await loadFile(r.file);else if(minfo?.mode==='cloud')await loadCloud();else tip('Could not load that movie — try again');
+ if(m.state===S.END)endOverlay()}
+/** your partner chose a different movie: cloud loads by itself, a device movie asks for your own copy (through the app picker) */
+async function partnerNext(q){partnerMeta=null;badFile='';nextTitle=q.title||'';
+ const f=await fetchMovieInfo();if(f)minfo=f;
+ if(minfo?.mode==='cloud')await loadCloud();else{movie.src=false;movie.meta=null;tip('Your partner chose '+(nextTitle?'“'+nextTitle+'”':'a new movie')+' — choose your copy')}
+ if(m.state===S.END)endOverlay()}
+m.on(s=>{if(s===S.WATCH)nextTitle=null});
 const showPick=()=>!APP||!minfo||minfo.mode==='none'||(minfo.mode==='device'&&!movie.src);   // from Twin Hearts the 🎞 file button only appears if the movie really is missing        // minfo = the movie you picked in Twin Hearts (null when the cinema is opened on its own)
 async function loadFile(f){if(!f)return;try{const meta=await movie.load(f);badFile='';if(minfo&&minfo.dur&&Math.abs(meta.dur-minfo.dur)>3){badFile='That file is a different length than the movie you picked in Twin Hearts. Choose the same version.';movie.src=false}sync?.send({t:'meta',meta:movie.src?meta:null});tip(badFile||'Loaded '+meta.name);if(movie.src)checkMeta()}catch(err){tip(err.message)}}
 fileLabel.querySelector('input').onchange=e=>loadFile(e.target.files[0]);
@@ -289,6 +316,6 @@ let inv=null,memes=null;
 memes=createMemes({audio,send:m=>sync?.send(m),present:()=>!!sync?.present});     // the 😂 meme-sound button (studio, lobby, hall)
 await wait(300);$('loading').classList.add('off');m.go(S.DOOR);setView('door');$('door-ui').style.display='flex';
 addEventListener('beforeunload',()=>sync?.close());
-if(APP){mountOrient();await join(APP.slot);inv=mountInvite({sync:()=>sync,enter:startEnter,stat,hidden:()=>inStudio,movie:()=>({info:minfo,loaded:movie.src,ready:movieReady(),bad:badFile,pick:loadFile})});
+if(APP){mountOrient();await join(APP.slot);listenNext(adoptNext);inv=mountInvite({sync:()=>sync,enter:startEnter,stat,hidden:()=>inStudio,askNext:mode=>askNextMovie(mode,minfo?.title),movie:()=>({info:minfo,loaded:movie.src,ready:movieReady(),bad:badFile,pick:loadFile})});
  minfo=await fetchMovieInfo();if(minfo?.mode==='cloud')loadCloud();      // opened from Twin Hearts: avatar + room are already decided
  handshake(f=>{if(f&&!movie.src)loadFile(f)})}                            // inside the app's frame: reuse the file picked on Watch Together (no second choose-movie)

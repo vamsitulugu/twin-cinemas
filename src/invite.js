@@ -42,6 +42,16 @@ export function handshake(cb){
   if(d.type==='file'&&d.file instanceof Blob)finish(d.file);else if(d.type==='nofile')finish(null)});
  const t=setInterval(()=>{if(done)return;if(++tries>16)return finish(null);toApp({type:'ready'})},500);   // the app might not be listening yet, so ask again
  toApp({type:'ready'})}
+/* ---- "next movie": the app's OWN picker (device / cloud) opens over the cinema; nothing is picked inside the theatre ----
+   cinema -> app : {src:'twin-cinema', type:'pick-movie', mode:'device'|'cloud', title}
+   app -> cinema : {src:'twin-hearts', type:'next-file', file:Blob}   (device copy; the room is already updated on the server)
+                   {src:'twin-hearts', type:'next-cloud'}             (shared cloud movie; the room is already updated)
+                   {src:'twin-hearts', type:'next-cancel'}            (closed the picker) */
+export const canAsk=()=>!!(APP&&APP.embed);
+export const askNextMovie=(mode,title)=>{if(!canAsk())return false;toApp({type:'pick-movie',mode,title:title||''});return true};
+let onNext=null;export const listenNext=f=>{onNext=f};
+if(APP&&APP.embed)addEventListener('message',e=>{if(e.source!==window.parent||e.origin!==APP.backOrigin)return;const d=e.data;if(!d||d.src!=='twin-hearts'||!onNext)return;
+ if(d.type==='next-file'&&d.file instanceof Blob)onNext({kind:'file',file:d.file});else if(d.type==='next-cloud')onNext({kind:'cloud'});else if(d.type==='next-cancel')onNext({kind:'cancel'})});
 /** ctx: {sync:()=>sync|null, enter:()=>void, stat:(text)=>void, movie:()=>({info,loaded,ready,pick(file)})} */
 export function mountInvite(ctx){
  if(!APP)return;
@@ -67,7 +77,8 @@ export function mountInvite(ctx){
   el.style.display='flex';el.textContent='';
   const t=document.createElement('div');t.className='inv-t';t.textContent=status();el.appendChild(t);
   const row=document.createElement('div');row.className='inv-r';el.appendChild(row);
-  if(needsPick()){const l=document.createElement('label');l.className='pick';l.textContent='🎞 Choose movie file';const i=document.createElement('input');i.type='file';i.accept='video/*';i.onchange=()=>{const f=i.files[0];if(f)ctx.movie().pick(f)};l.appendChild(i);row.appendChild(l)}
+  if(needsPick()&&ctx.askNext&&canAsk()){row.appendChild(btn('🎞 From device',()=>ctx.askNext('device')));row.appendChild(btn('☁️ From cloud',()=>ctx.askNext('cloud')))}
+  else if(needsPick()){const l=document.createElement('label');l.className='pick';l.textContent='🎞 Choose movie file';const i=document.createElement('input');i.type='file';i.accept='video/*';i.onchange=()=>{const f=i.files[0];if(f)ctx.movie().pick(f)};l.appendChild(i);row.appendChild(l)}
   if(APP.host){
    if(!here())row.appendChild(btn(inviting?'Sending…':phase==='lobby'?'💌 Invite partner':phase==='invited'?'💌 Invite again':'💌 Send invite again',invite,true)).disabled=inviting||!ONLINE;
    else{const b=row.appendChild(btn('▶ Start movie night',start,true));const m=mv();b.disabled=!!(m.info&&m.info.mode!=='none'&&!m.ready)}

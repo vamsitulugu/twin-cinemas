@@ -225,3 +225,8 @@ body.pl-hide #volbtn:not(.on){opacity:0;pointer-events:none}
 #st-ban>*{pointer-events:auto}
 #st-bt{color:#fff;font-size:15px;text-shadow:0 1px 8px #000}
 #st-ban button{background:linear-gradient(135deg,#c2305a,#8e3fd4);color:#fff;border:0;border-radius:999px;padding:12px 26px;font:inherit;font-weight:600;cursor:pointer}
+/* next movie: device / cloud buttons (they open the Twin Hearts app's own picker) */
+.nx{display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:4px}#ov small{font-size:13px;color:#a79ebf;letter-spacing:0}
+.nx>small{font-size:12px;color:#a9b1d9}.nx-r{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.nx button,.nx label.nxl{background:#ffffff18;color:#fff;border:1px solid #4a5497;border-radius:999px;padding:9px 16px;font:600 13px system-ui,sans-serif;cursor:pointer;letter-spacing:0}.nx label.nxl input{display:none}
+#mv-card.on{pointer-events:auto}#mv-card .nx{align-items:flex-start;margin-top:8px}#mv-card .nx-r{justify-content:flex-start}
