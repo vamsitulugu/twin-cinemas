@@ -188,6 +188,8 @@ async function partnerNext(q){partnerMeta=null;badFile='';nextTitle=q.title||'';
 m.on(s=>{if(s===S.WATCH)nextTitle=null});
 const showPick=()=>!APP||!minfo||minfo.mode==='none'||(minfo.mode==='device'&&!movie.src);   // from Twin Hearts the 🎞 file button only appears if the movie really is missing        // minfo = the movie you picked in Twin Hearts (null when the cinema is opened on its own)
 async function loadFile(f){if(!f)return;try{const meta=await movie.load(f);badFile='';if(minfo&&minfo.dur&&Math.abs(meta.dur-minfo.dur)>3){badFile='That file is a different length than the movie you picked in Twin Hearts. Choose the same version.';movie.src=false}sync?.send({t:'meta',meta:movie.src?meta:null});tip(badFile||'Loaded '+meta.name);if(movie.src)checkMeta()}catch(err){tip(err.message)}}
+/** the movie the person already picked on their phone, streamed by the Android app itself ({url,name}) — same checks as a picked file */
+async function loadDeviceUrl(d){if(!d||!d.url)return;try{const meta=await movie.loadUrl(d.url,d.name||minfo?.title||'Movie');badFile='';if(minfo&&minfo.dur&&Math.abs(meta.dur-minfo.dur)>3){badFile='That file is a different length than the movie you picked in Twin Hearts. Choose the same version.';movie.src=false}sync?.send({t:'meta',meta:movie.src?meta:null});tip(badFile||'Loaded '+meta.name);if(movie.src)checkMeta()}catch(err){tip(err.message)}}
 fileLabel.querySelector('input').onchange=e=>loadFile(e.target.files[0]);
 async function loadCloud(){try{const meta=await movie.loadUrl(minfo.url,minfo.title||'Movie');sync?.send({t:'meta',meta});checkMeta();tip('Movie ready ♥')}catch(err){minfo={...minfo,mode:'device'};tip(err.message+' — choose your own copy of the file instead')}}
 const movieReady=()=>!minfo||minfo.mode==='none'||(movie.src&&(minfo.mode==='cloud'||(partnerMeta&&same(movie.meta,partnerMeta))));
@@ -325,4 +327,4 @@ await wait(300);$('loading').classList.add('off');m.go(S.DOOR);setView('door');$
 addEventListener('beforeunload',()=>sync?.close());
 if(APP){mountOrient();await join(APP.slot);listenNext(adoptNext);inv=mountInvite({sync:()=>sync,enter:startEnter,stat,hidden:()=>inStudio,askNext:mode=>askNextMovie(mode,minfo?.title),movie:()=>({info:minfo,loaded:movie.src,ready:movieReady(),bad:badFile,pick:loadFile})});
  minfo=await fetchMovieInfo();if(minfo?.mode==='cloud')loadCloud();      // opened from Twin Hearts: avatar + room are already decided
- handshake(f=>{if(f&&!movie.src)loadFile(f)})}                            // inside the app's frame: reuse the file picked on Watch Together (no second choose-movie)
+ handshake(f=>{if(f&&!movie.src)(f instanceof Blob?loadFile(f):loadDeviceUrl(f))});if(APP.movieUrl&&!APP.embed)loadDeviceUrl({url:APP.movieUrl,name:APP.movieName})}                            // inside the app's frame: reuse the file picked on Watch Together (no second choose-movie)

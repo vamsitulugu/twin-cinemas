@@ -3,6 +3,7 @@
 // The session id becomes the private room code, the avatar is chosen for you (no Person 1/2 screen),
 // and the lobby shows Invite / Start for the host and a waiting message for the guest.
 // Without those params the cinema behaves exactly as before (manual room + Person 1/2).
+// mv=<url>&mn=<name> (Android app): the movie the person already picked on their phone, streamed from the app itself (virtual host below) — no second "choose movie".
 // e=1 means the app opened the cinema in a full-screen frame inside its own page. Then (a) the movie file you already
 // picked in Twin Hearts is handed over with postMessage (no second "choose movie"), and (b) Leave asks the app to close the frame.
 import {ONLINE} from './net.js';
@@ -10,12 +11,15 @@ import {iconize} from './icons.js';
 import {decodeLib} from './lib-codec.js';
 const API=(import.meta.env&&import.meta.env.VITE_API_BASE)||'https://us-app-av6d.onrender.com';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// The Android app serves the movie file the person picked from this ONE virtual address (its WebView answers it). Nothing else is accepted.
+const DEVICE_HOST='appassets.androidplatform.net';
+function deviceUrl(v){try{const u=new URL(v||'');return u.protocol==='https:'&&u.hostname===DEVICE_HOST&&u.pathname.startsWith('/twin-movie')?u.href:''}catch(e){return ''}}
 function read(){
  try{const q=new URLSearchParams(location.hash.slice(1)),s=q.get('s'),r=+q.get('r');
   if(!UUID.test(s||'')||(r!==1&&r!==2))return null;
   let back=null;try{const u=new URL(q.get('b')||'');if(/^https?:$/.test(u.protocol))back=u.href}catch(e){}
   let backOrigin='';try{backOrigin=new URL(back).origin}catch(e){}
-  const a={invited:q.get('i')==='1',session:s,slot:r,name:(q.get('n')||'').slice(0,30),couple:q.get('c')||'',user:q.get('u')||'',host:q.get('h')==='1',back,backOrigin,embed:q.get('e')==='1'&&window.parent!==window&&!!backOrigin,lib:decodeLib(q.get('lib'))};   // lib = this phone's Twin Hearts movie library (null = not sent)
+  const a={invited:q.get('i')==='1',session:s,slot:r,name:(q.get('n')||'').slice(0,30),couple:q.get('c')||'',user:q.get('u')||'',host:q.get('h')==='1',back,backOrigin,embed:q.get('e')==='1'&&window.parent!==window&&!!backOrigin,lib:decodeLib(q.get('lib')),movieUrl:deviceUrl(q.get('mv')),movieName:(q.get('mn')||'').slice(0,120),nx:q.get('nx')==='1'};   // lib = this phone's Twin Hearts movie library (null = not sent)
   if(!a.couple||!/^user[12]$/.test(a.user))return null;
   history.replaceState(0,'',location.pathname+'#'+s);   // couple id never stays in the address bar / history; the room code stays
   return a}catch(e){return null}}
@@ -46,7 +50,7 @@ export function handshake(cb){
  const finish=f=>{if(done)return;done=true;waitFile=false;clearInterval(t);cb(f)};
  addEventListener('message',e=>{if(e.source!==window.parent||e.origin!==APP.backOrigin)return;const d=e.data;
   if(!d||d.src!=='twin-hearts')return;
-  if(d.type==='file'&&d.file instanceof Blob)finish(d.file);else if(d.type==='nofile')finish(null)});
+  if(d.type==='file'&&d.file instanceof Blob)finish(d.file);else if(d.type==='file-url'&&deviceUrl(d.url))finish({url:deviceUrl(d.url),name:String(d.name||'').slice(0,120)});else if(d.type==='nofile')finish(null)});
  const t=setInterval(()=>{if(done)return;if(++tries>16)return finish(null);toApp({type:'ready'})},500);   // the app might not be listening yet, so ask again
  toApp({type:'ready'})}
 /* ---- "next movie": the app's OWN picker (device / cloud) opens over the cinema; nothing is picked inside the theatre ----
@@ -54,7 +58,7 @@ export function handshake(cb){
    app -> cinema : {src:'twin-hearts', type:'next-file', file:Blob}   (device copy; the room is already updated on the server)
                    {src:'twin-hearts', type:'next-cloud'}             (shared cloud movie; the room is already updated)
                    {src:'twin-hearts', type:'next-cancel'}            (closed the picker) */
-export const canAsk=()=>!!(APP&&APP.embed);
+export const canAsk=()=>!!(APP&&APP.embed&&APP.nx);      // the app must say it can open its own picker (nx=1); otherwise the theatre keeps its own file button
 export const askNextMovie=(mode,title)=>{if(!canAsk())return false;toApp({type:'pick-movie',mode,title:title||''});return true};
 let onNext=null;export const listenNext=f=>{onNext=f};
 if(APP&&APP.embed)addEventListener('message',e=>{if(e.source!==window.parent||e.origin!==APP.backOrigin)return;const d=e.data;if(!d||d.src!=='twin-hearts'||!onNext)return;
