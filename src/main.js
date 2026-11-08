@@ -38,8 +38,9 @@ const SONGS=[1,2,3,4].map(i=>`/audio/lobby-${i}.mp3`),CROWD='/audio/hall-crowd.m
 // loudness of the two layers in each place. outside = lobby / canteen, in = inside the hall, watch = while the movie plays
 const MIX={out:{songs:.25,crowd:0},in:{songs:.25,crowd:.5},watch:{songs:0,crowd:0}};
 const stepSfx=who=>{const d=who===me?0:Math.hypot(who.pos.x-me.pos.x,who.pos.z-me.pos.z);audio.step(who.pos.z>DOOR_Z+.05?'floor':'carpet',who===me?.9:Math.max(0,.75-d*.09))};   // partner steps get quieter with distance
-const spawn=(kind,h,color,x)=>{const p=new Player(makeAvatar(gl[kind],{height:h,walker:true,relaxed:true,style:kind==='cf'?'f':'m'}),color);scene.add(p.group);p.pos.set(x,floorY(DOOR_Z+1.9),DOOR_Z+1.9);p.group.rotation.y=Math.PI;return p};
-let me=null,partner=null,role=0,sync=null,partnerSeat=null,doorOpen=false;
+const SPAWN_Z=DOOR_Z+7.2;                                       // middle of the canteen floor: between the door wall and the counter, inside the queue lane
+const spawn=(kind,h,color,x)=>{const p=new Player(makeAvatar(gl[kind],{height:h,walker:true,relaxed:true,style:kind==='cf'?'f':'m'}),color);scene.add(p.group);p.pos.set(x,floorY(SPAWN_Z),SPAWN_Z);p.group.rotation.y=0;return p};
+let me=null,partner=null,role=0,sync=null,partnerSeat=null,doorOpen=false,inv=null,memes=null;
 const ads=createAdBreak({movie,send:m=>sync?.send(m),present:()=>!!sync?.present,leader:()=>role===1||!sync?.present});     // ad breaks: your own video, then Google ads (src/ads-config.js)
 let inStudio=false,pHere=false,lobbyGo=false;      // app mode: the avatar banner (studio) comes first; lobbyGo = we already left it for the lobbyhall.lobbyMode=true;                                   // the hall starts with the couple outside, in the lobby
 let bagPrev={popcorn:false,drink:false};
@@ -48,7 +49,7 @@ const canteen=createCanteen({balance:APP?fetchBalance:undefined,pay:APP?payOrder
  onGift:items=>sync?.send({t:'order',items}),
  onOrder:()=>crowd.orderPlaced(me?.pos.x??0),
  onReady:(order,kinds,mine)=>{if(mine)hall.lobby.showTray(kinds);crowd.orderReady(me?.pos.x??0)},
- onClose:()=>{if(m.state===S.DOOR)hint(LOBBY_TIP)}});
+ onClose:()=>{if(m.state===S.DOOR)hint(LOBBY_TIP);joyShow(m.state)}});
 const LOBBY_TIP='Walk anywhere (WASD / tap the floor) · stand at the counter to order · walk through the door to go in';
 const COL={1:0xff5c8a,2:0x4db2ff},KIND={1:['cf',1.68],2:['cm',1.8]},LX={1:-.5,2:.5};
 let doorIdle=0;
@@ -73,6 +74,7 @@ const RAIL=[$('cb'),$('snd'),$('leave')];RAIL.forEach(tipify);   // grabbed once
 const B=(icon,title,fn,cls)=>{const b=document.createElement('button');b.textContent=icon;b.dataset.tip=b.ariaLabel=title;b.onclick=fn;if(cls)b.className=cls;bar.appendChild(b);return b};
 function buttons(){bar.innerHTML='';const s=m.state;
  if(s===S.EXPLORE&&pending)B('🪑','Sit here',sitDown,'main');
+ if(s===S.DOOR&&me&&!inStudio&&APP&&inv?.isStarted())B('🎟','Go to the hall',startEnter,'main');      // back in the canteen after the movie night started: one tap (or walk through the door) takes you in again
  if(s===S.SEATED){const wait2=sync?.present&&!partnerSeat;B(wait2?'⏳':'🎬',wait2?'Waiting for partner to sit':'Start movie',()=>m.go(S.WATCH),'main').disabled=wait2;B('🧍','Stand up',standUp)}
  if([S.WATCH,S.PAUSED,S.BREAK].includes(s)){B(s===S.WATCH?'⏸':'▶',s===S.WATCH?'Pause':'Play',()=>m.go(s===S.WATCH?S.PAUSED:S.WATCH),'main');B('🎥','Next camera angle · '+viewLabel(),nextAngle);B('⛶','Full screen · choose a view',openViews);B(movie.muted?'🔇':'🔊',movie.muted?'Sound off':'Sound on',()=>{movie.muted=!movie.muted;buttons()});B('☕','Break',()=>m.go(S.BREAK))}
  if(me&&m.is(S.SEATED,S.WATCH,S.PAUSED,S.BREAK))B('🍿',me.popcorn?'Put popcorn away':'Popcorn',togglePop,me.popcorn?'on':'');
@@ -97,7 +99,7 @@ function leaveStudio(){fadeEl.classList.add('on');setTimeout(()=>{studio.on=fals
 const stBan=document.createElement('div');stBan.id='st-ban';
 if(APP){stBan.innerHTML='<div id="st-bt">Connecting…</div><button id="st-go" class="main">Go to lobby</button>';stEl.appendChild(stBan);$('st-go').append(ic(ArrowRight));$('st-go').onclick=()=>toLobby(false)}
 function studioRefresh(){if(!APP||!inStudio||!role)return;studio.layout(role,pHere);$('st-bt').textContent=pHere?'Your partner is here ♥':'Waiting for your partner…'}
-function toLobby(remote){if(!inStudio)return;inStudio=false;lobbyGo=true;if(!remote)sync?.send({t:'lobby'});stBan.style.display='none';leaveStudio();hint(LOBBY_TIP)}
+function toLobby(remote){if(!inStudio)return;inStudio=false;lobbyGo=true;if(!remote)sync?.send({t:'lobby'});stBan.style.display='none';leaveStudio();hint(LOBBY_TIP);joyShow(m.state)}
 $('st-anim').onclick=()=>studio.wave();
 $('st-spin').onclick=e=>e.currentTarget.classList.toggle('on',studio.toggleSpin());
 document.querySelectorAll('#st-rail [data-v]').forEach(b=>b.onclick=()=>{studio.view(b.dataset.v);document.querySelectorAll('#st-rail [data-v]').forEach(x=>x.classList.toggle('on',x===b))});
@@ -124,10 +126,10 @@ async function partnerSit(id){const seat=hall.seats.get(id);if(!seat||!partner||
  if(m.is(S.DOOR,S.ENTER)||partner.pos.z>DOOR_Z+.1)partner.snapSit(seat);else{await partner.walk(hall.route(partner.pos,seat));await partner.sit(seat)}buttons()}
 async function partnerStand(){const s=partnerSeat;if(!s)return;partnerSeat=null;hall.taken.delete(s.id);hall.setSeatHighlight(s.id,0);await partner.stand(s);partner.busy=false;buttons()}
 const snap=()=>({x:me.pos.x,z:me.pos.z,r:me.group.rotation.y,w:me.av.walk?1:0,s:mySeat?.id||null,pc:me.popcorn?1:0,dr:me.drink?1:0});
-async function join(r){if(role)return;role=r;if(APP)inStudio=true;else leaveStudio();audio.init();vol.show();audio.music(SONGS);audio.crowd(CROWD);audio.mix(MIX.out,2);crowd.active&&audio.murmur(.08);$('door-ui').classList.add('joined');const code=$('room').value.trim()||location.hash.slice(1)||'lobby';history.replaceState(0,'','#'+code);
+async function join(r){if(role)return;role=r;if(APP)inStudio=true;else leaveStudio();joyShow(m.state);audio.init();vol.show();audio.music(SONGS);audio.crowd(CROWD);audio.mix(MIX.out,2);crowd.active&&audio.murmur(.08);$('door-ui').classList.add('joined');const code=$('room').value.trim()||location.hash.slice(1)||'lobby';history.replaceState(0,'','#'+code);
  document.querySelectorAll('#roles button').forEach(b=>b.classList.toggle('on',+b.dataset.r===r));$('room').disabled=true;stat('Connecting…');
  const mk=q=>{const[k,h]=KIND[q],p=spawn(k,h,COL[q],LX[q]);p.onStep=stepSfx;return p};me=mk(r);partner=mk(3-r);partner.group.visible=false;
- setView('follow',{yaw:0,pitch:.5,dist:4.5});canteen.showBag(true);hint(LOBBY_TIP);
+ setView('follow',{yaw:Math.PI,pitch:.5,dist:4.5});canteen.showBag(true);hint(LOBBY_TIP);
  sync=await createSync(code,r,{
   onJoin(){partner.group.visible=true;pHere=true;stat('Your partner is in the lobby ♥');hint(m.state===S.DOOR?LOBBY_TIP:'');buttons();studioRefresh()},
   onHello(){sync?.send({t:'pos',...snap()});if(lobbyGo)sync?.send({t:'lobby'});if(APP&&inv?.isStarted())sync?.send({t:'go'});if(movie.meta)sync?.send({t:'meta',meta:movie.meta})},onMsg,
@@ -186,10 +188,12 @@ async function partnerNext(q){partnerMeta=null;badFile='';nextTitle=q.title||'';
  if(minfo?.mode==='cloud')await loadCloud();else{movie.src=false;movie.meta=null;tip('Your partner chose '+(nextTitle?'“'+nextTitle+'”':'a new movie')+' — choose your copy')}
  if(m.state===S.END)endOverlay()}
 m.on(s=>{if(s===S.WATCH)nextTitle=null});
-const showPick=()=>!APP||!minfo||minfo.mode==='none'||(minfo.mode==='device'&&!movie.src);   // from Twin Hearts the 🎞 file button only appears if the movie really is missing        // minfo = the movie you picked in Twin Hearts (null when the cinema is opened on its own)
+const showPick=()=>!APP||(!movie.src&&(!minfo||minfo.mode!=='cloud'));   // from Twin Hearts the 🎞 file button only appears if the movie really is missing        // minfo = the movie you picked in Twin Hearts (null when the cinema is opened on its own)
 async function loadFile(f){if(!f)return;try{const meta=await movie.load(f);badFile='';if(minfo&&minfo.dur&&Math.abs(meta.dur-minfo.dur)>3){badFile='That file is a different length than the movie you picked in Twin Hearts. Choose the same version.';movie.src=false}sync?.send({t:'meta',meta:movie.src?meta:null});tip(badFile||'Loaded '+meta.name);if(movie.src)checkMeta()}catch(err){tip(err.message)}}
 /** the movie the person already picked on their phone, streamed by the Android app itself ({url,name}) — same checks as a picked file */
 async function loadDeviceUrl(d){if(!d||!d.url)return;try{const meta=await movie.loadUrl(d.url,d.name||minfo?.title||'Movie');badFile='';if(minfo&&minfo.dur&&Math.abs(meta.dur-minfo.dur)>3){badFile='That file is a different length than the movie you picked in Twin Hearts. Choose the same version.';movie.src=false}sync?.send({t:'meta',meta:movie.src?meta:null});tip(badFile||'Loaded '+meta.name);if(movie.src)checkMeta()}catch(err){tip(err.message)}}
+const LEN_BAD='That file is a different length than the movie you picked in Twin Hearts. Choose the same version.';
+function verifyLength(){if(movie.src&&movie.meta&&minfo&&minfo.mode==='device'&&minfo.dur&&Math.abs(movie.meta.dur-minfo.dur)>3){badFile=LEN_BAD;movie.src=false;sync?.send({t:'meta',meta:null})}}
 fileLabel.querySelector('input').onchange=e=>loadFile(e.target.files[0]);
 async function loadCloud(){try{const meta=await movie.loadUrl(minfo.url,minfo.title||'Movie');sync?.send({t:'meta',meta});checkMeta();tip('Movie ready ♥')}catch(err){minfo={...minfo,mode:'device'};tip(err.message+' — choose your own copy of the file instead')}}
 const movieReady=()=>!minfo||minfo.mode==='none'||(movie.src&&(minfo.mode==='cloud'||(partnerMeta&&same(movie.meta,partnerMeta))));
@@ -254,12 +258,13 @@ m.on((s,p)=>{const who=applying?'Your partner':'You',vt=movie.time;
 const keys={};addEventListener('keydown',e=>{if(e.target.tagName!=='INPUT')keys[e.key.toLowerCase()]=1});addEventListener('keyup',e=>delete keys[e.key.toLowerCase()]);
 const rc=new THREE.Raycaster(),nd=new THREE.Vector2();let target=null;
 renderer.domElement.addEventListener('pointerup',e=>{if(!me||me.script||!rig.wasTap||canteen.isOpen)return;const lob=m.state===S.DOOR;if(!lob&&m.state!==S.EXPLORE)return;nd.set(e.clientX/innerWidth*2-1,-(e.clientY/innerHeight)*2+1);rc.setFromCamera(nd,camera);
- if(lob){const r=rc.intersectObjects([...hall.lobby.hits,...hall.lobby.floors])[0];if(r){if(hall.lobby.hits.includes(r.object))walkToCounter();else target=r.point}return}
+ if(lob){const r=rc.intersectObjects([...hall.lobby.hits,...hall.lobby.floors])[0];if(r){if(hall.lobby.hits.includes(r.object))walkToCounter();else if(!TOUCH)target=r.point}return}
  if(!me)return;const s=rc.intersectObjects(hall.picks)[0];if(s){const id=s.object.userData.seatId;if(!hall.taken.has(id)){if(pending)hall.setSeatHighlight(pending,0);pending=id;hall.setSeatHighlight(id,0xffb0c8);target=null;tip('');buttons()}else tip(`Seat ${id} is taken`);return}
- const f=rc.intersectObjects(hall.floors)[0];if(f){if(pending){hall.setSeatHighlight(pending,0);pending=null;buttons()}target=f.point}});
+ const f=rc.intersectObjects(hall.floors)[0];if(f){if(pending){hall.setSeatHighlight(pending,0);pending=null;buttons()}if(!TOUCH)target=f.point}});
 /* loop */
 /* ---- social: chat bubbles, popcorn, emotes, joystick, leave, sound ---- */
-let jx=0,jz=0,lastPlace=0;const bub=new Map(),head=new THREE.Vector3();
+let jx=0,jz=0,lastPlace=0;const TOUCH=matchMedia('(pointer:coarse)').matches;const joyShow=s=>{$('joy').style.display=TOUCH&&(s===S.EXPLORE||s===S.DOOR)&&!inStudio&&!canteen.isOpen&&role?'block':'none'};
+const bub=new Map(),head=new THREE.Vector3();
 function say(p,x){let b=bub.get(p);if(!b){b={el:document.createElement('div'),t:0};b.el.className='bubble';document.body.appendChild(b.el);bub.set(p,b)}b.el.textContent=x;b.el.style.background=p===me?'#c2305ae6':'#2a7fc4e6';b.t=performance.now()}
 function bubbleTick(now){for(const[p,b]of bub){if(now-b.t>8000||!p.group.visible){b.el.style.opacity=0;continue}head.copy(p.pos);head.y+=p.av.sit>.5?1.75:2.15;head.project(camera);b.el.style.left=(head.x*.5+.5)*innerWidth+'px';b.el.style.top=(-head.y*.5+.5)*innerHeight+'px';b.el.style.opacity=head.z<1?1:0}}
 /* chat: hidden until the 💬 button is tapped. Before / between the movie the messages float above the couple's heads
@@ -287,10 +292,13 @@ function doEmote(p,e){if(e==='wave')p.av.emote('wave');else{const ch=EMO[e]||'�
  if(e==='heart'||e==='love'||e==='kiss')audio.heart()}
 function emote(e){doEmote(me,e);sync?.send({t:'emo',e})}
 function leaveTheatre(){if(confirm('Leave the theatre?')){markEnded();sync?.close();if(!leaveApp())location.reload()}}$('leave').onclick=leaveTheatre;let muted=false;function toggleAlerts(){muted=!muted;audio.mute(muted);$('snd').textContent=muted?'🔕':'🔔'}$('snd').onclick=toggleAlerts;
-m.on((s,p)=>{$('top-r').style.display=s===S.DOOR?'none':(s===S.ENTER?'none':'flex');$('joy').style.display=s===S.EXPLORE&&matchMedia('(pointer:coarse)').matches?'block':'none';
+m.on((s,p)=>{$('top-r').style.display=s===S.DOOR?'none':(s===S.ENTER?'none':'flex');joyShow(s);
  audio.ambient(s===S.WATCH?.015:.05);audio.mix(s===S.WATCH?MIX.watch:m.is(S.DOOR,S.ENTER)?MIX.out:MIX.in,s===S.WATCH?3:2);if(s===S.END)audio.chime()});
-{const joy=$('joy'),kn=joy.firstElementChild,mv=e=>{const r=joy.getBoundingClientRect(),dx=e.clientX-(r.left+55),dy=e.clientY-(r.top+55),d=Math.hypot(dx,dy),k=d>45?45/d:1;kn.style.transform=`translate(${dx*k}px,${dy*k}px)`;jx=dx*k/45;jz=dy*k/45};
- joy.addEventListener('pointerdown',e=>{joy.setPointerCapture(e.pointerId);mv(e)});joy.addEventListener('pointermove',e=>{if(e.buttons||e.pressure)mv(e)});const up=()=>{jx=jz=0;kn.style.transform=''};joy.addEventListener('pointerup',up);joy.addEventListener('pointercancel',up)}
+{const joy=$('joy'),kn=joy.firstElementChild;let pid=null;
+ const mv=e=>{const r=joy.getBoundingClientRect(),R=r.width/2,dx=e.clientX-(r.left+R),dy=e.clientY-(r.top+R),d=Math.hypot(dx,dy),lim=R*.75,k=d>lim?lim/d:1;kn.style.transform=`translate(${dx*k}px,${dy*k}px)`;jx=dx*k/lim;jz=dy*k/lim;if(Math.hypot(jx,jz)<.12)jx=jz=0};
+ const up=e=>{if(pid!==null&&e.pointerId!==pid)return;pid=null;jx=jz=0;kn.style.transform=''};
+ joy.addEventListener('pointerdown',e=>{if(pid!==null)return;pid=e.pointerId;joy.setPointerCapture(e.pointerId);e.stopPropagation();e.preventDefault();target=null;mv(e)});
+ joy.addEventListener('pointermove',e=>{if(e.pointerId===pid){e.stopPropagation();mv(e)}});joy.addEventListener('pointerup',up);joy.addEventListener('pointercancel',up);joy.addEventListener('lostpointercapture',up)}
 /* ---- smoothness: adaptive render scale. Watches the real frame time; if the device can't hold ~60 fps it quietly lowers the resolution a notch
    (and raises it again when there's headroom), so walking and camera moves stay fluid on any screen. ---- */
 let fAcc=0,fN=0,calm=0,slow=0,cap=PR_MAX;const applyPR=()=>{renderer.setPixelRatio(pr);renderer.setSize(innerWidth,innerHeight)};
@@ -307,7 +315,7 @@ renderer.setAnimationLoop(()=>{const raw=clock.getDelta(),dt=Math.min(raw,.05),t
   me.move(dx,dz,dt,hall,k);if(m.state===S.EXPLORE&&me.pos.z>DOOR_Z-.5&&Math.abs(me.pos.x)<.9)exitHall()}
  if(me&&!studio.on&&m.state===S.DOOR&&!me.script&&!canteen.isOpen&&!me.seated){const lx=me.pos.x,lz=me.pos.z-DOOR_Z,nearC=lz>COUNTER_Z-.7&&Math.abs(lx)<3.5;
   if(nearC&&!atCounter){atCounter=true;target=null;me.face(0,1);canteen.open();crowd.greet(me.pos.x)}else if(!nearC&&lz<COUNTER_Z-1.4)atCounter=false;
-  if(lz<1.25&&Math.abs(lx)<1&&role&&!APP)startEnter()}
+  if(lz<1.25&&Math.abs(lx)<1&&role&&(!APP||inv?.isStarted()))startEnter()}
  movie.tick(dt);ads.tick(m.state===S.WATCH&&!applying);const now=performance.now();if(role===1&&sync?.present&&m.state===S.WATCH&&now-lastSync>3000){lastSync=now;sync.send({t:'sync',vt:movie.time,pl:movie.playing})}
  if(movie.dur&&now-lastUI>200){lastUI=now;const v=movie.time/movie.dur*1000,tc=fmt(movie.time),td=fmt(movie.dur);if(!UI.sk.matches(':active'))UI.sk.value=v;if(!UI.fsk.matches(':active'))UI.fsk.value=v;
   if(UI.tcT!==tc){UI.tcT=tc;UI.tc.textContent=UI.ftc.textContent=tc}if(UI.tdT!==td){UI.tdT=td;UI.td.textContent=td}pl.tick()}
@@ -321,10 +329,14 @@ renderer.setAnimationLoop(()=>{const raw=clock.getDelta(),dt=Math.min(raw,.05),t
   if(m.state!==S.DOOR&&(dyn||shAcc>=(m.is(S.WATCH)?.5:.25))){shAcc=0;renderer.shadowMap.needsUpdate=true}renderer.render(scene,camera)}
  });
 addEventListener('pointerdown',()=>{audio.init();audio.music(SONGS);audio.crowd(CROWD);crowd.active&&audio.murmur(.08)},{once:true,capture:true});
-let inv=null,memes=null;
 memes=createMemes({audio,send:m=>sync?.send(m),present:()=>!!sync?.present});     // the 😂 meme-sound button (studio, lobby, hall)
 await wait(300);$('loading').classList.add('off');m.go(S.DOOR);setView('door');$('door-ui').style.display='flex';
 addEventListener('beforeunload',()=>sync?.close());
-if(APP){mountOrient();await join(APP.slot);listenNext(adoptNext);inv=mountInvite({sync:()=>sync,enter:startEnter,stat,hidden:()=>inStudio,askNext:mode=>askNextMovie(mode,minfo?.title),movie:()=>({info:minfo,loaded:movie.src,ready:movieReady(),bad:badFile,pick:loadFile})});
+if(APP){mountOrient();
+ // The movie you already picked in Twin Hearts is asked for IMMEDIATELY (web: postMessage hand-over, Android: the app's own stream) — it no longer waits for the server calls below,
+ // so the "choose your copy" prompt never appears when the file is there. It is checked against the picked movie's length once the server answers.
+ handshake(f=>{if(f&&!movie.src)(f instanceof Blob?loadFile(f):loadDeviceUrl(f))});
+ if(APP.movieUrl&&!APP.embed)loadDeviceUrl({url:APP.movieUrl,name:APP.movieName});
+ await join(APP.slot);listenNext(adoptNext);inv=mountInvite({sync:()=>sync,enter:startEnter,stat,hidden:()=>inStudio,askNext:mode=>askNextMovie(mode,minfo?.title),movie:()=>({info:minfo,loaded:movie.src,ready:movieReady(),bad:badFile,pick:loadFile})});
  minfo=await fetchMovieInfo();if(minfo?.mode==='cloud')loadCloud();      // opened from Twin Hearts: avatar + room are already decided
- handshake(f=>{if(f&&!movie.src)(f instanceof Blob?loadFile(f):loadDeviceUrl(f))});if(APP.movieUrl&&!APP.embed)loadDeviceUrl({url:APP.movieUrl,name:APP.movieName})}                            // inside the app's frame: reuse the file picked on Watch Together (no second choose-movie)
+ verifyLength()}

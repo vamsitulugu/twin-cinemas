@@ -27,7 +27,7 @@ export const APP=read();                                 // null = normal (manua
 const post=(path,body)=>fetch(API+'/api/cinema/'+APP.session+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({coupleId:APP.couple,role:APP.user,...body}),keepalive:true}).then(r=>r.json().then(j=>({ok:r.ok,j})));
 /** What movie did the two of you pick in Twin Hearts Watch Together? -> {mode:'cloud',title,dur,url} | {mode:'device',title,dur} | {mode:'none'} | null */
 export async function fetchMovieInfo(){if(!APP)return null;
- try{const r=await fetch(API+'/api/cinema/'+APP.session+'/movie?coupleId='+encodeURIComponent(APP.couple)+'&role='+APP.user,{cache:'no-store'});return r.ok?await r.json():null}catch(e){return null}}
+ try{const r=await fetch(API+'/api/cinema/'+APP.session+'/movie?coupleId='+encodeURIComponent(APP.couple)+'&role='+APP.user,{cache:'no-store',signal:AbortSignal.timeout?AbortSignal.timeout(20000):undefined});return r.ok?await r.json():null}catch(e){return null}}
 /** The couple's Twin Hearts movie library (Movie -> Library) -> [{id,title,year,genre,posterUrl,backdropUrl,overview,rating,status}] | null if it could not be loaded */
 export async function fetchLibrary(){if(!APP)return null;
  try{const r=await fetch(API+'/api/cinema/'+APP.session+'/library?coupleId='+encodeURIComponent(APP.couple),{cache:'no-store'});if(!r.ok)return null;const j=await r.json();return Array.isArray(j.movies)?j.movies:null}catch(e){return null}}
@@ -51,7 +51,7 @@ export function handshake(cb){
  addEventListener('message',e=>{if(e.source!==window.parent||e.origin!==APP.backOrigin)return;const d=e.data;
   if(!d||d.src!=='twin-hearts')return;
   if(d.type==='file'&&d.file instanceof Blob)finish(d.file);else if(d.type==='file-url'&&deviceUrl(d.url))finish({url:deviceUrl(d.url),name:String(d.name||'').slice(0,120)});else if(d.type==='nofile')finish(null)});
- const t=setInterval(()=>{if(done)return;if(++tries>16)return finish(null);toApp({type:'ready'})},500);   // the app might not be listening yet, so ask again
+ const t=setInterval(()=>{if(done)return;if(++tries>40)return finish(null);toApp({type:'ready'})},500);   // the app might not be listening yet, so ask again
  toApp({type:'ready'})}
 /* ---- "next movie": the app's OWN picker (device / cloud) opens over the cinema; nothing is picked inside the theatre ----
    cinema -> app : {src:'twin-cinema', type:'pick-movie', mode:'device'|'cloud', title}
