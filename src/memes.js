@@ -69,7 +69,7 @@ export function createMemes({audio,send,present}){
  const head=el('div','mm-h'),both=el('button','mm-both on','💞 Both of us'),x=el('button','mm-x','✕');x.setAttribute('aria-label','Close');
  const sub=el('small',0,CLIPS.length+' sounds');head.append(el('b',0,'😂 MEME SOUNDS'),sub,both,x);
  const sw=el('div','mm-s'),q=el('input');q.placeholder='Search sounds…';q.autocomplete='off';q.setAttribute('aria-label','Search sounds');sw.appendChild(q);
- const grid=el('div','mm-g'),empty=el('div','mm-empty','No sound found');empty.hidden=true;
+ const grid=el('div','mm-g');grid.dataset.keepEmoji='';const empty=el('div','mm-empty','No sound found');empty.hidden=true;
  const foot=el('div','mm-f'),hint=el('span',0,'Tap to play · tap again to stop'),stopB=el('button',0,'⏹ Stop');foot.append(hint,stopB);
  box.append(head,sw,grid,foot);
  const toast=el('div','mm-t');document.body.append(btn,sheet,toast);
