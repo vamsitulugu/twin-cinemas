@@ -51,6 +51,10 @@ export function makeAvatar(gltf,{height=1.7,look,hide=[],walker=false,seated=fal
   rotW(B.Head,-ST.lean*.6*a,(.12*h+.05*Math.sin(t*.9+seed))*id,.04*h*id)};
 /* ---- lobby body language: hand gestures / props poses, talking mouth, where the head looks, things worn on a bone ---- */
  const jaw=[];m.traverse(k=>{if(k.isMesh&&k.morphTargetDictionary){const d=k.morphTargetDictionary,i=d.jawOpen??d.mouthOpen;if(i!==undefined)jaw.push([k,i])}});
+ /* lip-sync shapes (MetaPerson / Ready Player Me visemes) + a smile; avatars that only have a mouth-open shape still move their mouth through the jaw above */
+ const VIS=['viseme_aa','viseme_O','viseme_E','viseme_I','viseme_U','viseme_PP','viseme_FF','viseme_DD','viseme_nn'],vis=[],smi=[];
+ m.traverse(k=>{if(k.isMesh&&k.morphTargetDictionary){const d=k.morphTargetDictionary;VIS.forEach(n=>{if(d[n]!==undefined)vis.push({k,i:d[n],v:0,n})});['mouthSmile','mouthSmileLeft','mouthSmileRight'].forEach(n=>{if(d[n]!==undefined)smi.push([k,d[n]])})}});
+ let vT=0,vCur=-1,sm=0;
  /** one arm: upper arm direction u and forearm direction f, in the avatar's own frame (x is out to the side for that arm, y up, z forward) */
  const arm=(S,ux,uy,uz,fx,fy,fz)=>{const k=sg[S];A(B[S+'Arm'],B[S+'ForeArm'],VT(ux*k,uy,uz));A(B[S+'ForeArm'],B[S+'Hand'],VT(fx*k,fy,fz))};
  const sn=Math.sin,ACT={
@@ -71,7 +75,26 @@ export function makeAvatar(gltf,{height=1.7,look,hide=[],walker=false,seated=fal
   b.getWorldScale(_wv);h.scale.set(1/_wv.x,1/_wv.y,1/_wv.z);                                    // 1 unit = 1 metre, whatever the rig's own scale
   b.getWorldQuaternion(_wq);group.getWorldQuaternion(_gq);h.quaternion.copy(_wq.invert().multiply(_gq));   // faces the way the avatar faces, whatever the bone axes
   b.getWorldPosition(_wv).add(new THREE.Vector3(off[0],off[1],off[2]).applyQuaternion(_gq));h.position.copy(b.worldToLocal(_wv));h.add(obj)};
- let lastPose=-1;const av={group,sit:seated?1:0,walk:0,amp:0,ph:0,wave:0,act:'',talk:0,tly:0,tlp:0,wear,emote(n){if(n==='wave')av.wave=2.2},
+
+ /* ---- SEATED CHAT (audience): while talking the person gestures with their hands, nods and turns their head toward who they talk to; while listening they look at the speaker, nod and smile.
+        Poses are blended in and out (cw 0..1) over the normal seated pose, so nobody snaps. Set av.speak / av.listen / av.gaze (yaw, rad) / av.gest ('talk'|'talk2'); see seatedChatter() below. ---- */
+ const SB=new Map(sb.map(x=>[x.b,x.q])),CB=[B.LeftArm,B.LeftForeArm,B.RightArm,B.RightForeArm,B.Spine2,B.Neck,B.Head],CQ=CB.map(()=>new THREE.Quaternion());let cw=0,gz=0,nodK=0;
+ const chatPose=(dt,t,want)=>{
+  cw+=(want-cw)*Math.min(1,dt*3.5);gz+=(av.gaze-gz)*Math.min(1,dt*3);
+  if(cw<.004){if(cw>0){cw=0;CB.forEach(b=>b.quaternion.copy(SB.get(b)));B.Head.quaternion.copy(headQ)}return false}
+  const sp=av.speak,s1=sn(t*2.1+seed),s2=sn(t*3.3+seed*1.7),s3=sn(t*5.1+seed);
+  CB.forEach(b=>b.quaternion.copy(SB.get(b)));                                   // start from the seated pose
+  B.Head.quaternion.copy(headQ).multiply(yq.setFromAxisAngle(YA,sn(t*.6+seed)*.3*(1-cw)));
+  if(sp){                                                                         // hands talk
+   const f=av.gest==='talk2'?ACT.talk2:ACT.talk;f(t*(.85+.25*s2));
+  }
+  const g=Math.max(-1.1,Math.min(1.1,gz));
+  rotW(B.Spine2,.02*s1,g*.22,0);                                                  // shoulders turn a little toward the other person
+  const nod=sp?(.07+.06*Math.max(0,s3))*sn(t*4.2+seed)+.04*Math.max(0,sn(t*1.4+seed)):.1*Math.max(0,sn(t*1.1+seed))*Math.max(0,sn(t*.37+seed));   // speaker: rhythm nods; listener: slow agreeing nods
+  rotW(B.Neck,nod*.4,g*.35,(sp?.03:.05)*s1);rotW(B.Head,nod*.6,g*.5,(sp?.03:.05)*s2);
+  CB.forEach((b,i)=>{CQ[i].copy(b.quaternion);b.quaternion.copy(SB.get(b)).slerp(CQ[i],cw)});   // blend with the seated pose
+  return true};
+ let lastPose=-1;const av={group,sit:seated?1:0,walk:0,amp:0,ph:0,wave:0,act:'',talk:0,tly:0,tlp:0,wear,speak:false,listen:false,gaze:0,gest:'talk',emote(n){if(n==='wave')av.wave=2.2},
   walkPose(t=0){wb.forEach(([b,q])=>b.quaternion.copy(q));const a=av.amp;if(ST)stylePose(a,t,av.ph);
    ['Left','Right'].forEach((n,i)=>{const f=av.ph+i*Math.PI,k=sg[n],th=P.sw*a*Math.sin(f),ps=th-(P.knee+P.lift*a*Math.max(0,Math.cos(f))),al=-P.as*a*Math.sin(f);
     A(B[n+'UpLeg'],B[n+'Leg'],VT(.03*k,-Math.cos(th),Math.sin(th)));A(B[n+'Leg'],B[n+'Foot'],VT(0,-Math.cos(ps),Math.sin(ps)));A(B[n+'Foot'],B[n+'ToeBase'],VT(0,-.1,1));
@@ -79,8 +102,14 @@ export function makeAvatar(gltf,{height=1.7,look,hide=[],walker=false,seated=fal
    m.position.y=my-leg*a*(1-Math.cos(P.sw*Math.abs(Math.sin(av.ph))))+(ST?ST.bob*a*Math.cos(2*av.ph):0)},
   update(dt,t){if(walker){av.amp+=((av.walk&&av.sit<.5?1:0)-av.amp)*Math.min(1,dt*8);av.ph+=dt*(ST?ST.cad:6.8)*av.amp;if(av.sit<1&&(av.amp>.02||av.walk||av.sit>0||t-lastPose>.045||t<lastPose)){lastPose=t;av.walkPose(t);bodyLang(dt,t)}   // only a fully idle, standing avatar is refreshed at ~22 Hz
     hips.position.copy(hrest).lerp(hsit,av.sit);if(av.sit>0)for(const s of sb)s.b.quaternion.slerp(s.q,av.sit)}
-   if(jaw.length&&(av.talk||tk>.002)){const v=av.talk?.1+.3*Math.abs(sn(t*9+seed))*(.55+.45*sn(t*2.3+seed)):0;tk+=(v-tk)*Math.min(1,dt*18);for(const j of jaw)j[0].morphTargetInfluences[j[1]]=tk}
-   if(av.sit>.98)B.Head.quaternion.copy(headQ).multiply(yq.setFromAxisAngle(YA,Math.sin(t*.6+seed)*.3));
+   const mouthOn=av.talk||av.speak;
+   if(jaw.length&&(mouthOn||tk>.002)){const v=mouthOn?.1+.3*Math.abs(sn(t*9+seed))*(.55+.45*sn(t*2.3+seed)):0;tk+=(v-tk)*Math.min(1,dt*18);for(const j of jaw)j[0].morphTargetInfluences[j[1]]=tk}
+   if(vis.length&&(mouthOn||vT>.002||vCur>=0)){   // syllable-by-syllable mouth shapes: a new vowel / consonant every ~0.1-0.2 s, with short pauses between phrases
+    const ph=sn(t*1.3+seed*3)>-.55;vT-=dt;if(vT<=0){vT=.09+Math.random()*.11;vCur=mouthOn&&ph?(Math.random()*vis.length|0):-1}
+    for(let i=0;i<vis.length;i++){const q=vis[i],tg=mouthOn&&i===vCur?.45+.45*Math.abs(sn(t*7+i)):0;q.v+=(tg-q.v)*Math.min(1,dt*22);q.k.morphTargetInfluences[q.i]=q.v}
+    if(!mouthOn&&vCur<0&&vis.every(q=>q.v<.003))vT=0}
+   if(smi.length){const tg=av.listen&&sn(t*.5+seed*2)>.35?.45:av.speak?.2:0;sm+=(tg-sm)*Math.min(1,dt*3);for(const x of smi)x[0].morphTargetInfluences[x[1]]=sm}
+   if(av.sit>.98){if(!(av.speak||av.listen||cw>.004)||!chatPose(dt,t,av.speak||av.listen?1:0))B.Head.quaternion.copy(headQ).multiply(yq.setFromAxisAngle(YA,Math.sin(t*.6+seed)*.3))}
    if(av.wave>0){av.wave-=dt;const k=sg.Right,s=Math.sin(t*11);A(B.RightArm,B.RightForeArm,VT(.55*k,.65,.25));A(B.RightForeArm,B.RightHand,VT((.2+.5*s)*k,.9,.15))}}};
  if(seated){sb.forEach(s=>s.b.quaternion.copy(s.q));hips.position.copy(hsit)}
  return av}
@@ -91,3 +120,25 @@ export function seatAudience(scene,hall,gl){const list=[],bases=[{g:gl.ma,k:'m'}
  seats.forEach(id=>{const s=hall.seats.get(id),b=bases[i++%bases.length],look=randomLook(b.k);if(b.x)look.skin=[1,1,1];
   const a=makeAvatar(b.g,{height:look.height,seated:true,look,headScale:look.head,hide:b.k==='rpm'?[...(look.capOn?[]:['Wolf3D_Headwear']),...(look.beard?[]:['Wolf3D_Beard'])]:b.gl&&Math.random()<.5?['Wolf3D_Glasses']:[]});
   a.group.position.copy(s.pos);a.group.rotation.y=Math.PI+(Math.random()-.5)*.12;if(!CROWD_SHADOWS)a.group.traverse(k=>{if(k.isMesh)k.castShadow=false});scene.add(a.group);list.push(a)});return list}
+
+/** Gives the seated audience a social life. Each person is paired with their nearest neighbour (in the same or the next row); a pair now and then starts a chat:
+    one talks (mouth shapes, hand gestures, nods, head turned to the other), the other listens (looks at them, nods, smiles), they swap turns a few times, then go quiet again.
+    Never more than MAX_TALKERS people talk at once, and while the movie plays everyone watches the screen quietly (set QUIET_DURING_MOVIE=false to let them whisper). Call .update(dt,t,quiet) every frame. */
+export const QUIET_DURING_MOVIE=true,MAX_TALKERS=6,CHAT_RANGE=3.4;
+export function seatedChatter(list){
+ const yawTo=(a,b)=>{const g=a.group,dx=b.group.position.x-g.position.x,dz=b.group.position.z-g.position.z,ry=g.rotation.y,lx=dx*Math.cos(ry)-dz*Math.sin(ry),lz=dx*Math.sin(ry)+dz*Math.cos(ry);return Math.atan2(lx,lz)};   // where the other person is, in my own frame
+ const dist=(a,b)=>Math.hypot(a.group.position.x-b.group.position.x,(a.group.position.z-b.group.position.z)*1.4),pairs=[],seen=new Set();
+ list.forEach((a,i)=>{let bj=-1,bd=CHAT_RANGE;list.forEach((b,j)=>{if(i===j)return;const d=dist(a,b);if(d<bd){bd=d;bj=j}});
+  if(bj<0)return;const k=Math.min(i,bj)+'-'+Math.max(i,bj);if(seen.has(k))return;seen.add(k);pairs.push({a,b:list[bj],st:'rest',t:Math.random()*10,turns:0,who:0})});
+ const clear=p=>{for(const x of[p.a,p.b]){x.speak=false;x.listen=false;x.gaze=0}};
+ let wasQuiet=false;
+ return{pairs,update(dt,t,quiet){
+  const q=quiet&&QUIET_DURING_MOVIE;if(q){if(!wasQuiet){pairs.forEach(p=>{clear(p);p.st='rest';p.t=2+Math.random()*6})}wasQuiet=true;return}wasQuiet=false;
+  let talking=pairs.filter(p=>p.st==='talk').length;
+  for(const p of pairs){p.t-=dt;if(p.t>0)continue;
+   if(p.st==='rest'){if(talking>=MAX_TALKERS){p.t=1+Math.random()*3;continue}
+    p.st='talk';p.turns=2+(Math.random()*4|0);p.who=Math.random()<.5?0:1;talking++;p.t=2+Math.random()*3.5;
+    const sp=p.who?p.b:p.a,ls=p.who?p.a:p.b;sp.speak=true;sp.listen=false;sp.gest=Math.random()<.5?'talk':'talk2';sp.gaze=yawTo(sp,ls)*.85;ls.listen=true;ls.speak=false;ls.gaze=yawTo(ls,sp)}
+   else{p.turns--;
+    if(p.turns<=0){clear(p);p.st='rest';p.t=6+Math.random()*14;talking--}
+    else{p.who^=1;p.t=1.5+Math.random()*3.5;const sp=p.who?p.b:p.a,ls=p.who?p.a:p.b;sp.speak=true;sp.listen=false;sp.gest=Math.random()<.5?'talk':'talk2';sp.gaze=yawTo(sp,ls)*.85;ls.speak=false;ls.listen=true;ls.gaze=yawTo(ls,sp)}}}}}}

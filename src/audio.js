@@ -1,12 +1,12 @@
 // Tiny synthesized sound kit (no audio files): room tone, door, chat blip, crunch, chime. Call audio.init() from a user gesture.
-let ctx,master,amb,murG,musicGain,crowdGain,songEl=null,songsOn=false,crowdOn=false,stepFlip=0,mixT={songs:0,crowd:0},memeGain,memeId=0,memeCur=null,memeBuf=new Map(),duck=1,muted=false,mixS=2,bgmScale=1,list=[],order=[],oi=0;
+let ctx,master,amb,murG,musicGain,crowdGain,songEl=null,songsOn=false,crowdOn=false,stepFlip=0,stepBufs=[],stepIx=0,mixT={songs:0,crowd:0},memeGain,memeId=0,memeCur=null,memeBuf=new Map(),duck=1,muted=false,mixS=2,bgmScale=1,list=[],order=[],oi=0;
 const env=(g,t,a,d)=>{g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(a,t+.01);g.gain.exponentialRampToValueAtTime(.0001,t+d)};
 function tone(f,d,type='sine',a=.2,t0=0,to){if(!ctx)return;const t=ctx.currentTime+t0,o=ctx.createOscillator(),g=ctx.createGain();o.type=type;o.frequency.setValueAtTime(f,t);if(to)o.frequency.exponentialRampToValueAtTime(to,t+d);env(g,t,a,d);o.connect(g).connect(master);o.start(t);o.stop(t+d+.05)}
 function burst(d,a=.3,f=3000,t0=0){if(!ctx)return;const t=ctx.currentTime+t0,n=ctx.createBufferSource(),b=ctx.createBuffer(1,ctx.sampleRate*d,ctx.sampleRate),x=b.getChannelData(0);for(let i=0;i<x.length;i++)x[i]=Math.random()*2-1;n.buffer=b;
  const fl=ctx.createBiquadFilter();fl.type='bandpass';fl.frequency.value=f;const g=ctx.createGain();env(g,t,a,d);n.connect(fl).connect(g).connect(master);n.start(t)}
 
 /* ---- footsteps: synthesized, two surfaces. vol 0..1 (use distance for your partner), surface 'floor' (lobby) | 'carpet' (hall) ---- */
-function step(surface='carpet',vol=1){if(!ctx||vol<=.01)return;const t=ctx.currentTime,fl=surface==='floor',side=(stepFlip^=1)?1:.93,j=.9+Math.random()*.2;
+function stepSynth(surface='carpet',vol=1){if(!ctx||vol<=.01)return;const t=ctx.currentTime,fl=surface==='floor',side=(stepFlip^=1)?1:.93,j=.9+Math.random()*.2;
  const g=ctx.createGain();g.gain.value=vol*(fl?.5:.32);g.connect(master);
  // thump: a very short low tone (the heel)
  const o=ctx.createOscillator(),og=ctx.createGain();o.type='sine';o.frequency.setValueAtTime((fl?150:110)*side*j,t);o.frequency.exponentialRampToValueAtTime(48,t+.09);
@@ -15,6 +15,38 @@ function step(surface='carpet',vol=1){if(!ctx||vol<=.01)return;const t=ctx.curre
  const n=ctx.createBufferSource(),b=ctx.createBuffer(1,ctx.sampleRate*.12,ctx.sampleRate),x=b.getChannelData(0);for(let i=0;i<x.length;i++)x[i]=Math.random()*2-1;n.buffer=b;
  const f=ctx.createBiquadFilter();f.type=fl?'bandpass':'lowpass';f.frequency.value=(fl?2200:700)*j;f.Q.value=fl?1.2:.5;
  const ng=ctx.createGain();ng.gain.setValueAtTime(0,t);ng.gain.linearRampToValueAtTime(fl?.55:.35,t+.004);ng.gain.exponentialRampToValueAtTime(.0001,t+(fl?.05:.1));n.connect(f).connect(ng).connect(g);n.start(t)}
+
+/* ---- REAL footsteps: your own recording (public/audio/footsteps.mp3 | .wav | .ogg | .m4a) ----
+   The file can be ONE step or a clip of several steps walking. It is cut into single footfalls (at each loud onset) and
+   one footfall is played, in recorded order, at the exact moment a foot lands (Player.update fires onStep on every
+   half-cycle of the gait). If the file is missing or cannot be decoded, the synthesized steps above are used instead. */
+const STEP_FILES=['/audio/footsteps.mp3','/audio/footsteps.wav','/audio/footsteps.ogg','/audio/footsteps.m4a','/audio/footstep.mp3','/audio/footstep.wav'];
+const STEP_MAX=.55,STEP_GAP=.2;   // longest piece kept per step (s) / shortest allowed gap between two onsets (s)
+function sliceSteps(buf){
+ const sr=buf.sampleRate,ch=buf.numberOfChannels,N=buf.length,w=Math.max(8,sr*.004|0),n=Math.floor(N/w),e=new Float32Array(n),d=buf.getChannelData(0);
+ for(let i=0;i<n;i++){let a=0;for(let k=i*w;k<(i+1)*w;k++)a+=d[k]*d[k];e[i]=Math.sqrt(a/w)}
+ const sm=new Float32Array(n);for(let i=0;i<n;i++){let a=0,c=0;for(let k=Math.max(0,i-1);k<=Math.min(n-1,i+1);k++){a+=e[k];c++}sm[i]=a/c}
+ let mx=0;for(let i=0;i<n;i++)if(sm[i]>mx)mx=sm[i];
+ const th=mx*.32,on=[];let last=-9;
+ for(let i=1;i<n;i++){if(sm[i]>th&&sm[i-1]<=th){const t=i*w/sr;if(t-last>=STEP_GAP){on.push(t);last=t}}}
+ if(!on.length)on.push(0);
+ const out=[];
+ on.forEach((t0,i)=>{const s0=Math.max(0,Math.floor((t0-.015)*sr)),nx=i+1<on.length?Math.floor((on[i+1]-.02)*sr):N,s1=Math.min(N,nx,s0+Math.floor(STEP_MAX*sr));if(s1-s0<sr*.03)return;
+  const b=ctx.createBuffer(ch,s1-s0,sr);let pk=0;
+  for(let c=0;c<ch;c++){const src=buf.getChannelData(c),dst=b.getChannelData(c);for(let k=0;k<dst.length;k++){dst[k]=src[s0+k];const a=Math.abs(dst[k]);if(a>pk)pk=a}}
+  const g=pk>.0001?.9/pk:1,fi=Math.min(b.length,Math.floor(sr*.004)),fo=Math.min(b.length>>1,Math.floor(sr*.06));   // normalise + tiny fade in/out so a cut never clicks
+  for(let c=0;c<ch;c++){const dst=b.getChannelData(c);for(let k=0;k<dst.length;k++){let m=g;if(k<fi)m*=k/fi;const r=dst.length-k;if(r<fo)m*=r/fo;dst[k]*=m}}
+  out.push(b)});
+ return out}
+async function loadSteps(){
+ for(const u of STEP_FILES){try{const r=await fetch(u);if(!r.ok)continue;const ct=r.headers.get('content-type')||'';if(/text\/html/i.test(ct))continue;   // dev servers answer a missing file with index.html
+   const buf=await ctx.decodeAudioData(await r.arrayBuffer()),parts=sliceSteps(buf);if(parts.length){stepBufs=parts;console.info('[footsteps] '+u+' -> '+parts.length+' step(s)');return}}catch(e){}}
+ console.info('[footsteps] no recording found in /public/audio, using synthesized steps')}
+function stepSample(surface,vol){
+ const t=ctx.currentTime,b=stepBufs[stepIx++%stepBufs.length],src=ctx.createBufferSource(),g=ctx.createGain();src.buffer=b;
+ src.playbackRate.value=stepBufs.length>1?1:(stepIx&1?.97:1.03);   // one-step file: alternate pitch a little so left and right differ
+ g.gain.value=Math.min(1,vol)*(surface==='floor'?1:.9);src.connect(g).connect(master);src.start(t)}
+function step(surface='carpet',vol=1){if(!ctx||vol<=.01)return;stepBufs.length?stepSample(surface,vol):stepSynth(surface,vol)}
 /* playlist: shuffled on every page load (never starts with the song that played last time), then plays on to the next song by itself, reshuffling after the last one */
 function shuffle(n){const a=[...Array(n).keys()];for(let i=n-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a}
 function startSongs(urls){if(!ctx||songsOn||!urls?.length)return;songsOn=true;list=urls;order=shuffle(list.length);
@@ -41,7 +73,7 @@ async function memePlay(url,onend){if(!ctx)return null;memeStop();const my=memeI
  ctx.resume();const n=ctx.createBufferSource();n.buffer=buf;n.connect(memeGain);const h={stop:()=>n.stop()};memeCur=h;duck=.3;applyMix(true);
  n.onended=()=>{if(memeCur===h){memeCur=null;duck=1;applyMix(true)}onend?.()};n.start();return h}
 export const audio={
- init(){if(ctx){ctx.resume();return}ctx=new(window.AudioContext||window.webkitAudioContext)();master=ctx.createGain();master.gain.value=.6;master.connect(ctx.destination);musicGain=ctx.createGain();musicGain.gain.value=0;musicGain.connect(master);crowdGain=ctx.createGain();crowdGain.gain.value=0;crowdGain.connect(master);memeGain=ctx.createGain();memeGain.gain.value=.8;memeGain.connect(master);applyMix();
+ init(){if(ctx){ctx.resume();return}ctx=new(window.AudioContext||window.webkitAudioContext)();master=ctx.createGain();master.gain.value=.6;master.connect(ctx.destination);musicGain=ctx.createGain();musicGain.gain.value=0;musicGain.connect(master);crowdGain=ctx.createGain();crowdGain.gain.value=0;crowdGain.connect(master);memeGain=ctx.createGain();memeGain.gain.value=.8;memeGain.connect(master);applyMix();loadSteps();
   const b=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
   const n=ctx.createBufferSource();n.buffer=b;n.loop=true;const f=ctx.createBiquadFilter();f.type='lowpass';f.frequency.value=180;amb=ctx.createGain();amb.gain.value=0;n.connect(f).connect(amb).connect(master);n.start()},
  step,

@@ -37,3 +37,9 @@ public/models/audience  drop more MetaPerson .glb files here + list them in inde
 
 ## Lobby crowd (src/crowd.js)
 The lobby / canteen is now busy: 2 canteen sellers in uniform and caps (scoop popcorn, work the till, greet you, hand over your order), people queueing at both counters, friends chatting in circles (talking mouths, hand gestures, speech bubbles) who go to buy snacks and come back, visitors browsing posters / menu, taking selfies, checking the time at the hall door, and public-address announcements with a chime. Everyone has their own face, skin, hair and clothes (src/look.js `crowdLook`). The crowd only exists and updates while the couple is in the lobby; the couple cannot walk through people (`hall.discs`). New avatar controls for this are documented at `makeAvatar` in src/avatar.js (`av.act`, `av.talk`, `av.tly/tlp`, `av.wear`). New sounds in src/audio.js: `pop`, `ching`, `murmur`.
+
+## Real footstep sounds
+Put your recording in `public/audio/footsteps.mp3` (.wav / .ogg / .m4a also work). It can be one step or a short clip of several steps: it is cut into single footfalls and one is played at the exact moment each foot lands (you, your partner, lobby = hall). Missing file = the old synthesized steps. Check the browser console for `[footsteps] ... N step(s)`.
+
+## Audience chat (hall)
+`seatedChatter` in src/avatar.js: seated people pair up with a neighbour and chat (lip-sync mouth shapes, hand gestures, head turns and nods, smiles). Quiet while the movie plays; tune `QUIET_DURING_MOVIE`, `MAX_TALKERS`, `CHAT_RANGE`.
