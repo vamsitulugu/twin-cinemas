@@ -30,7 +30,10 @@ function startSongs(urls){if(!ctx||songsOn||!urls?.length)return;songsOn=true;li
 async function startCrowd(url){if(!ctx||crowdOn||!url)return;crowdOn=true;try{const buf=await ctx.decodeAudioData(await(await fetch(url)).arrayBuffer()),n=ctx.createBufferSource();n.buffer=buf;n.loop=true;n.connect(crowdGain);n.start()}catch(e){crowdOn=false;console.warn('crowd audio',e)}}
 function applyMix(fast){if(!ctx)return;const t=ctx.currentTime,k=fast?.06:Math.max(.05,mixS/3);musicGain.gain.setTargetAtTime(mixT.songs*bgmScale*duck,t,k);crowdGain.gain.setTargetAtTime(mixT.crowd*bgmScale*duck,t,k)}
 /* ---- meme sounds: one at a time, the songs / crowd dip while one plays. Clips are downloaded + decoded on first use, then kept. ---- */
-function memeLoad(url){let p=memeBuf.get(url);if(!p){p=fetch(url).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.arrayBuffer()}).then(b=>ctx.decodeAudioData(b));p.catch(()=>memeBuf.delete(url));memeBuf.set(url,p)}return p}
+const memeRaw=new Map();
+function memeBytes(url){let p=memeRaw.get(url);if(!p){p=fetch(url).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.arrayBuffer()});p.catch(()=>memeRaw.delete(url));memeRaw.set(url,p)}return p}   // downloaded once, kept in memory
+function memeLoad(url){let p=memeBuf.get(url);if(!p){p=memeBytes(url).then(b=>ctx.decodeAudioData(b.slice(0)));p.catch(()=>memeBuf.delete(url));memeBuf.set(url,p)}return p}
+async function memePrefetch(urls){for(const u of urls){try{await memeBytes(u)}catch{}}}      // download only (works before audio.init), so a sound from your partner starts instantly
 function memeStop(){memeId++;const h=memeCur;memeCur=null;duck=1;applyMix(true);if(h)try{h.stop()}catch{}}
 async function memePlay(url,onend){if(!ctx)return null;memeStop();const my=memeId;let buf;
  try{buf=await memeLoad(url)}catch(e){console.warn('meme sound',e);return null}
@@ -53,7 +56,7 @@ export const audio={
  next(){songEl&&songEl.dispatchEvent(new Event('ended'))},
  ambient(v){amb&&amb.gain.setTargetAtTime(v,ctx.currentTime,.8)},
  mute(m){muted=!!m;if(master)master.gain.value=m?0:.6},isMuted:()=>muted,
- meme:memePlay,memeStop,
+ meme:memePlay,memeStop,memePrefetch,state:()=>ctx?ctx.state:'none',
  door(){tone(110,.9,'sawtooth',.08,0,55);burst(.5,.12,400,.1)},
  chat(){tone(880,.12,'sine',.12);tone(1320,.14,'sine',.08,.07)},
  crunch(){for(let i=0;i<4;i++)burst(.07,.25,2500+Math.random()*2000,i*.11)},
