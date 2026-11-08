@@ -80,16 +80,17 @@ $('st-spin').onclick=e=>e.currentTarget.classList.toggle('on',studio.toggleSpin(
 document.querySelectorAll('#st-rail [data-v]').forEach(b=>b.onclick=()=>{studio.view(b.dataset.v);document.querySelectorAll('#st-rail [data-v]').forEach(x=>x.classList.toggle('on',x===b))});
 $('st-png').onclick=async()=>{const bl=await studio.png();if(!bl)return;const a=document.createElement('a');a.href=URL.createObjectURL(bl);a.download='our-twin-cinema.png';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)};
 /* ---- lobby movie frames: the couple's Twin Hearts library; details card when you stand in front of a frame ---- */
-const libLoad=async()=>{const l=await fetchLibrary();hall.lobby.frames.set(l,APP?'err':'app')};libLoad();setInterval(libLoad,90000);
+// Twin Hearts hands over THIS phone's Movie -> Library in the link (&lib=). Without it (older app / Android) fall back to the server list.
+const libLoad=async()=>{if(APP&&APP.lib){hall.lobby.frames.set(APP.lib);return}const l=await fetchLibrary();hall.lobby.frames.set(l,APP?'err':'app')};libLoad();setInterval(()=>{if(!(APP&&APP.lib))libLoad()},90000);
 const mvc=document.createElement('div');mvc.id='mv-card';document.body.appendChild(mvc);let mvId=null;
-const STAT={watchlist:'Watchlist',watching:'Watching',watched:'Watched'};
+const STAT={watchlist:'Watchlist',watching:'Watching',watched:'Watched'},OWN={my:'❤️ Mine',partner:"💜 Partner's",both:'💕 Together'};
 function mvCard(mv){const id=mv?mv.id:null;if(id===mvId)return;mvId=id;mvc.classList.toggle('on',!!mv);if(!mv){return}
  mvc.textContent='';const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e};
  if(/^https?:\/\//i.test(mv.posterUrl||'')){const i=el('img');i.src=mv.posterUrl;i.alt='';i.referrerPolicy='no-referrer';mvc.appendChild(i)}
  const b=el('div','mv-b');b.appendChild(el('h3',0,mv.title));
  const meta=[mv.year,mv.genre].filter(Boolean).join(' · ');if(meta)b.appendChild(el('div','mv-m',meta));
- const r=el('div','mv-r');if(mv.rating!=null&&mv.rating!=='')r.appendChild(el('span','mv-s','★ '+Number(mv.rating).toFixed(1)));if(STAT[mv.status])r.appendChild(el('span','mv-t',STAT[mv.status]));if(r.children.length)b.appendChild(r);
- b.appendChild(el('p',0,mv.overview||'No description yet.'));mvc.appendChild(b)}
+ const r=el('div','mv-r');if(mv.rating!=null&&mv.rating!=='')r.appendChild(el('span','mv-s','★ '+(+Number(mv.rating).toFixed(1))+(mv.max?'/'+mv.max:'')));if(mv.fav)r.appendChild(el('span','mv-s','⭐ Favourite'));if(STAT[mv.status])r.appendChild(el('span','mv-t',STAT[mv.status]));if(OWN[mv.owner])r.appendChild(el('span','mv-o',OWN[mv.owner]));if(r.children.length)b.appendChild(r);
+ b.appendChild(el('p',0,mv.overview||'No review or description yet.'));mvc.appendChild(b)}
 /* actions */
 let blocked=false,atCounter=false;
 const startEnter=()=>{if(blocked||m.state!==S.DOOR)return;audio.door();audio.ambient(.05);m.go(S.ENTER)};

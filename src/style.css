@@ -200,3 +200,4 @@ body.app #dstat{display:none}
 #mv-card .mv-r{display:flex;gap:8px;margin-bottom:6px;font-size:12px}
 #mv-card .mv-s{color:#ffb15c;font-weight:700}#mv-card .mv-t{background:#2fbf5b;color:#06210f;font-weight:700;border-radius:999px;padding:1px 9px}
 #mv-card p{margin:0;font-size:12.5px;line-height:1.45;color:#d8dcf5;display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden}
+#mv-card .mv-o{color:#d8dcf5;background:#ffffff14;border-radius:999px;padding:1px 9px}#mv-card .mv-r{flex-wrap:wrap}

@@ -6,6 +6,7 @@
 // e=1 means the app opened the cinema in a full-screen frame inside its own page. Then (a) the movie file you already
 // picked in Twin Hearts is handed over with postMessage (no second "choose movie"), and (b) Leave asks the app to close the frame.
 import {ONLINE} from './net.js';
+import {decodeLib} from './lib-codec.js';
 const API=(import.meta.env&&import.meta.env.VITE_API_BASE)||'https://us-app-av6d.onrender.com';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function read(){
@@ -13,7 +14,7 @@ function read(){
   if(!UUID.test(s||'')||(r!==1&&r!==2))return null;
   let back=null;try{const u=new URL(q.get('b')||'');if(/^https?:$/.test(u.protocol))back=u.href}catch(e){}
   let backOrigin='';try{backOrigin=new URL(back).origin}catch(e){}
-  const a={invited:q.get('i')==='1',session:s,slot:r,name:(q.get('n')||'').slice(0,30),couple:q.get('c')||'',user:q.get('u')||'',host:q.get('h')==='1',back,backOrigin,embed:q.get('e')==='1'&&window.parent!==window&&!!backOrigin};
+  const a={invited:q.get('i')==='1',session:s,slot:r,name:(q.get('n')||'').slice(0,30),couple:q.get('c')||'',user:q.get('u')||'',host:q.get('h')==='1',back,backOrigin,embed:q.get('e')==='1'&&window.parent!==window&&!!backOrigin,lib:decodeLib(q.get('lib'))};   // lib = this phone's Twin Hearts movie library (null = not sent)
   if(!a.couple||!/^user[12]$/.test(a.user))return null;
   history.replaceState(0,'',location.pathname+'#'+s);   // couple id never stays in the address bar / history; the room code stays
   return a}catch(e){return null}}
