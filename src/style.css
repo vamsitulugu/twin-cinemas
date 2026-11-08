@@ -190,3 +190,13 @@ body.app #dstat{display:none}
 #rot{position:fixed;inset:0;z-index:60;display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:#0b0d1cf2;color:#fff;text-align:center;padding:24px}
 #rot .rot-i{font-size:64px;animation:rotp 1.8s ease-in-out infinite}#rot .rot-t{font-size:20px;font-weight:600}#rot small{color:var(--mute)}#rot button{margin-top:8px}
 @keyframes rotp{0%,25%{transform:rotate(0)}70%,100%{transform:rotate(-90deg)}}
+
+/* movie details card (lobby: stand in front of a frame) */
+#mv-card{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom));transform:translate(-50%,16px);width:min(440px,92vw);display:flex;gap:12px;padding:12px;border-radius:18px;background:#161a3af2;border:1px solid #4a5497;box-shadow:0 10px 40px #000a;color:#eef0ff;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:6}
+#mv-card.on{opacity:1;transform:translate(-50%,0)}
+#mv-card img{width:84px;height:126px;object-fit:cover;border-radius:10px;flex:none;background:#0e1126}
+#mv-card .mv-b{min-width:0}#mv-card h3{margin:0 0 3px;font-size:17px;line-height:1.2}
+#mv-card .mv-m{font-size:12px;color:#a9b1d9;margin-bottom:6px}
+#mv-card .mv-r{display:flex;gap:8px;margin-bottom:6px;font-size:12px}
+#mv-card .mv-s{color:#ffb15c;font-weight:700}#mv-card .mv-t{background:#2fbf5b;color:#06210f;font-weight:700;border-radius:999px;padding:1px 9px}
+#mv-card p{margin:0;font-size:12.5px;line-height:1.45;color:#d8dcf5;display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden}

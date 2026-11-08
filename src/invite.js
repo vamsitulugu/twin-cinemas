@@ -22,6 +22,9 @@ const post=(path,body)=>fetch(API+'/api/cinema/'+APP.session+path,{method:'POST'
 /** What movie did the two of you pick in Twin Hearts Watch Together? -> {mode:'cloud',title,dur,url} | {mode:'device',title,dur} | {mode:'none'} | null */
 export async function fetchMovieInfo(){if(!APP)return null;
  try{const r=await fetch(API+'/api/cinema/'+APP.session+'/movie?coupleId='+encodeURIComponent(APP.couple)+'&role='+APP.user,{cache:'no-store'});return r.ok?await r.json():null}catch(e){return null}}
+/** The couple's Twin Hearts movie library (Movie -> Library) -> [{id,title,year,genre,posterUrl,backdropUrl,overview,rating,status}] | null if it could not be loaded */
+export async function fetchLibrary(){if(!APP)return null;
+ try{const r=await fetch(API+'/api/cinema/'+APP.session+'/library?coupleId='+encodeURIComponent(APP.couple),{cache:'no-store'});if(!r.ok)return null;const j=await r.json();return Array.isArray(j.movies)?j.movies:null}catch(e){return null}}
 export const markEnded=()=>{if(APP&&APP.host)post('/status',{status:'ended'}).catch(()=>{})};
 /* ---- embedded in the Twin Hearts app (e=1): talk to the page that holds us, only ever to/from the app's own origin ---- */
 const toApp=m=>{try{window.parent.postMessage({src:'twin-cinema',...m},APP.backOrigin)}catch(e){}};

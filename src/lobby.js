@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {createFrames} from './frames.js';
 
 /* ------------------------------------------------------------------
    Lobby + canteen (outside the hall door, +z side).
@@ -27,13 +28,6 @@ function floorCanvas(){const s=256,c=mk(s,s),x=c.getContext('2d');x.fillStyle='#
 function tileCanvas(){const c=mk(256,256),x=c.getContext('2d');x.fillStyle='#f1eee6';x.fillRect(0,0,256,256);x.strokeStyle='#bdb8aa';x.lineWidth=2;for(let i=0;i<=256;i+=64){x.beginPath();x.moveTo(i,0);x.lineTo(i,256);x.stroke();x.beginPath();x.moveTo(0,i);x.lineTo(256,i);x.stroke()}return c}
 function brickCanvas(){const c=mk(256,128),x=c.getContext('2d');x.fillStyle='#262a28';x.fillRect(0,0,256,128);for(let r=0;r<8;r++)for(let i=-1;i<5;i++){const ox=r%2?32:0;x.fillStyle=`rgb(${rnd(44,64)|0},${rnd(50,68)|0},${rnd(48,64)|0})`;x.fillRect(i*64+ox+2,r*16+2,60,12)}return c}
 
-const POSTERS=[['FOREVER US','Two hearts. One story.',345],['MIDNIGHT KISS','Some nights never end',280],['SUNSET PROMISE','Say it under the sky',22],['THE LAST DANCE','One more song',300],['PARIS, MON AMOUR','Love has a city',200],['ONCE UPON A HUG','A tender comedy',45],['LOVE LETTERS','Written in the stars',330],['TWIN HEARTS','Watch it together',350]];
-function posterCanvas([title,tag,hue]){const w=256,h=384,c=mk(w,h),x=c.getContext('2d'),g=x.createLinearGradient(0,0,0,h);g.addColorStop(0,`hsl(${hue},70%,22%)`);g.addColorStop(.55,`hsl(${hue},75%,42%)`);g.addColorStop(1,`hsl(${(hue+30)%360},80%,12%)`);x.fillStyle=g;x.fillRect(0,0,w,h);
- const sun=x.createRadialGradient(w/2,h*.45,5,w/2,h*.45,110);sun.addColorStop(0,'rgba(255,230,190,.9)');sun.addColorStop(1,'rgba(255,200,150,0)');x.fillStyle=sun;x.fillRect(0,0,w,h);
- x.fillStyle='rgba(10,5,10,.88)';for(const[px,s]of[[w/2-26,1],[w/2+26,.93]]){x.beginPath();x.arc(px,h*.5-52*s,15*s,0,7);x.fill();x.beginPath();x.roundRect(px-19*s,h*.5-34*s,38*s,100*s,16*s);x.fill()}
- x.fillStyle='#ff6a82';x.font='32px serif';x.textAlign='center';x.fillText('♥',w/2,h*.5-84);
- x.fillStyle='#fff';x.shadowColor='#000';x.shadowBlur=8;x.font='bold 30px Georgia,serif';const words=title.split(' ');words.forEach((wd,i)=>x.fillText(wd,w/2,h*.74+i*32-(words.length-1)*14));
- x.shadowBlur=0;x.font='italic 14px Georgia,serif';x.fillStyle='#ffe7d0';x.fillText(tag,w/2,h-26);return c}
 function screenCanvas(kind){const w=512,h=288,c=mk(w,h),x=c.getContext('2d');
  const T={Beverages:['#7a3db8','#ff4fa0','🥤',['Cola · Shakes','Iced Tea · Lime Soda','Cold Coffee · Water']],Popcorn:['#b3121c','#ff5a3c','🍿',['Salted · Butter · Caramel','Cheese · Peri-Peri','Small · Medium · Large · Tub']],'Ice Cream':['#0d9b7d','#38d9a9','🍦',['Cups · Cones · Sundaes','Add your toppings','Couple Heart Sundae']]}[kind];
  const g=x.createLinearGradient(0,0,w,h);g.addColorStop(0,T[0]);g.addColorStop(1,T[1]);x.fillStyle=g;x.fillRect(0,0,w,h);
@@ -91,9 +85,9 @@ export function buildLobby(scene,{y0,DOOR_Z}){
  for(const[px,pz]of[[-4.3,5.2],[4.3,5.2],[-4.3,9.4],[4.3,9.4]]){box(1.5,LH,1.5,pw,px,Y(LH/2),Z(pz));box(1.64,.32,1.64,black,px,Y(.16),Z(pz));box(1.64,.3,1.64,black,px,Y(LH-.15),Z(pz));
   boxes.push({x0:px-.85,x1:px+.85,z0:DOOR_Z+pz-.85,z1:DOOR_Z+pz+.85})}
 
- /* framed posters (light boxes) */
- const posterMats=POSTERS.map(p=>new THREE.MeshBasicMaterial({map:tex(posterCanvas(p)),toneMapped:false}));let pi=0;
- const poster=(x,z,ry)=>{const g=new THREE.Group();g.add(new THREE.Mesh(new THREE.BoxGeometry(1.1,1.62,.1),black));const p=new THREE.Mesh(new THREE.PlaneGeometry(.94,1.44),posterMats[pi++%posterMats.length]);p.position.z=.056;g.add(p);
+ /* framed movie posters = the couple's Twin Hearts library (see frames.js) */
+ const frames=createFrames();
+ const poster=(x,z,ry)=>{const g=new THREE.Group();g.add(new THREE.Mesh(new THREE.BoxGeometry(1.1,1.62,.1),black));const fr=frames.add(x,Y(2.35),z,ry),p=fr.plane;p.position.z=.056;g.add(p);fr.plate.position.set(0,1.04,.06);g.add(fr.plate);
   const glow=new THREE.Mesh(new THREE.PlaneGeometry(1.5,2.1),new THREE.MeshBasicMaterial({color:0xffd9a8,transparent:true,opacity:.1,blending:THREE.AdditiveBlending,depthWrite:false}));glow.position.z=.02;g.add(glow);glows.push(glow.material);
   g.position.set(x,Y(2.35),z);g.rotation.y=ry;scene.add(g)};
  [2.4,5.4,8.4,11.4].forEach(z=>{poster(-LW+.07,Z(z),Math.PI/2);poster(LW-.07,Z(z),-Math.PI/2)});
@@ -169,12 +163,13 @@ export function buildLobby(scene,{y0,DOOR_Z}){
 
  /* ---------- api ---------- */
  const servePoint={x:0,z:DOOR_Z+COUNTER_Z};
- return{boxes,hits,floors:[floor],servePoint,
+ let lt=0;
+ return{boxes,hits,floors:[floor],servePoint,frames,
   /** show the finished order on the counter. kinds = array of 'popcorn' | 'drink' | 'ice' | 'food' */
   showTray(kinds){tray.children.slice(1).forEach(c=>tray.remove(c));const list=kinds.slice(0,8),n=list.length;list.forEach((k,i)=>{const o=(MAKE[k]||food)();o.position.x=(i-(n-1)/2)*(1.3/Math.max(n,3));o.position.z=(i%2?.1:-.08);tray.add(o)});tray.visible=n>0},
   hideTray(){tray.visible=false},
   /** house=1 full lights; lobby lights fade with the hall so they never leak light into a dark movie */
   setOn(on){lights.forEach(([l])=>l.visible=on)},
   setLights(v){lights.forEach(([l,i])=>l.intensity=i*v);glows.forEach(m=>m.opacity=.04+.08*v)},
-  update(t){pop.rotation.y=Math.sin(t*.8)*.04;for(let i=0;i<pdata.length;i++){const p=pdata[i];mt.setPosition(p[0],p[1]+Math.sin(t*3+p[3])*.012,p[2]);pop.setMatrixAt(i,mt)}pop.instanceMatrix.needsUpdate=true;
+  update(t){frames.update(Math.min(.1,Math.max(0,t-lt)));lt=t;pop.rotation.y=Math.sin(t*.8)*.04;for(let i=0;i<pdata.length;i++){const p=pdata[i];mt.setPosition(p[0],p[1]+Math.sin(t*3+p[3])*.012,p[2]);pop.setMatrixAt(i,mt)}pop.instanceMatrix.needsUpdate=true;
    const k=.55+.45*Math.sin(t*1.2);neonM.color.setRGB(1,.28+.12*k,.25+.1*k);scrs.forEach((s,i)=>s.material.color.setScalar(.92+.08*Math.sin(t*2+i)))}}}

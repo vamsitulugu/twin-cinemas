@@ -11,7 +11,7 @@ import {createCanteen} from './canteen.js';
 import {COUNTER_Z} from './lobby.js';
 import {createStudio} from './studio.js';
 import {createPlayer} from './controls.js';
-import {APP,mountInvite,markEnded,fetchMovieInfo,leaveApp,handshake} from './invite.js';
+import {APP,mountInvite,markEnded,fetchMovieInfo,leaveApp,handshake,fetchLibrary} from './invite.js';
 import {mountOrient} from './orient.js';
 const $=id=>document.getElementById(id),wait=ms=>new Promise(r=>setTimeout(r,ms));
 const tween=(ms,f)=>new Promise(r=>{const s=performance.now();(function k(){const u=Math.min(1,(performance.now()-s)/ms);f(u*u*(3-2*u));u<1?requestAnimationFrame(k):r()})()});
@@ -79,6 +79,17 @@ $('st-anim').onclick=()=>studio.wave();
 $('st-spin').onclick=e=>e.currentTarget.classList.toggle('on',studio.toggleSpin());
 document.querySelectorAll('#st-rail [data-v]').forEach(b=>b.onclick=()=>{studio.view(b.dataset.v);document.querySelectorAll('#st-rail [data-v]').forEach(x=>x.classList.toggle('on',x===b))});
 $('st-png').onclick=async()=>{const bl=await studio.png();if(!bl)return;const a=document.createElement('a');a.href=URL.createObjectURL(bl);a.download='our-twin-cinema.png';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)};
+/* ---- lobby movie frames: the couple's Twin Hearts library; details card when you stand in front of a frame ---- */
+const libLoad=async()=>{const l=await fetchLibrary();hall.lobby.frames.set(l,APP?'err':'app')};libLoad();setInterval(libLoad,90000);
+const mvc=document.createElement('div');mvc.id='mv-card';document.body.appendChild(mvc);let mvId=null;
+const STAT={watchlist:'Watchlist',watching:'Watching',watched:'Watched'};
+function mvCard(mv){const id=mv?mv.id:null;if(id===mvId)return;mvId=id;mvc.classList.toggle('on',!!mv);if(!mv){return}
+ mvc.textContent='';const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e};
+ if(/^https?:\/\//i.test(mv.posterUrl||'')){const i=el('img');i.src=mv.posterUrl;i.alt='';i.referrerPolicy='no-referrer';mvc.appendChild(i)}
+ const b=el('div','mv-b');b.appendChild(el('h3',0,mv.title));
+ const meta=[mv.year,mv.genre].filter(Boolean).join(' · ');if(meta)b.appendChild(el('div','mv-m',meta));
+ const r=el('div','mv-r');if(mv.rating!=null&&mv.rating!=='')r.appendChild(el('span','mv-s','★ '+Number(mv.rating).toFixed(1)));if(STAT[mv.status])r.appendChild(el('span','mv-t',STAT[mv.status]));if(r.children.length)b.appendChild(r);
+ b.appendChild(el('p',0,mv.overview||'No description yet.'));mvc.appendChild(b)}
 /* actions */
 let blocked=false,atCounter=false;
 const startEnter=()=>{if(blocked||m.state!==S.DOOR)return;audio.door();audio.ambient(.05);m.go(S.ENTER)};
@@ -238,6 +249,7 @@ renderer.setAnimationLoop(()=>{const raw=clock.getDelta(),dt=Math.min(raw,.05),t
   if(UI.tcT!==tc){UI.tcT=tc;UI.tc.textContent=UI.ftc.textContent=tc}if(UI.tdT!==td){UI.tdT=td;UI.td.textContent=td}pl.tick()}
  aud.forEach(a=>a.update(dt,t));if(me){me.update(dt,t);partner.update(dt,t);rig.ctx.me.copy(me.pos);rig.ctx.couple.copy(me.pos);if(partner.group.visible)rig.ctx.couple.add(partner.pos).multiplyScalar(.5);sync?.tick(performance.now(),me.av.walk,snap)}{const cx=rig.ctx,[sw,sh]=hall.dims();cx.sw=sw;cx.sh=sh;cx.sy=hall.screen.position.y;if(me){cx.chatT.copy(me.pos);if(partner.group.visible&&me.pos.distanceTo(partner.pos)<2.6)cx.chatT.add(partner.pos).multiplyScalar(.5);if(now-lastPlace>1000){lastPlace=now;placeChat()}}}
  rig.ctx.seated=!!(me&&me.seated);rig.ctx.taken=hall.taken;rig.ctx.mine=mySeat?.id||null;rig.ctx.lobbyY=floorY(DOOR_Z);rig.ctx.lobby=m.state===S.DOOR;if(m.is(S.DOOR,S.ENTER))hall.lobby.update(t);
+ {const fr=hall.lobby.frames,k=m.state===S.DOOR&&me&&!me.seated?fr.near(me.pos):-1;fr.hold=k>=0;mvCard(k>=0?fr.movie(k):null)}
  bubbleTick(now);if(!(movie.src&&m.is(S.WATCH,S.PAUSED,S.BREAK,S.END))&&now-lastScr>66){lastScr=now;hall.drawScreen(t,m.is(S.WATCH,S.PAUSED,S.BREAK),movie.dur?movie.time/movie.dur:0)}
  rig.update(dt,t);
  if(studio.on){renderer.shadowMap.autoUpdate=true;shAcc=1;studio.render(dt,t)}
