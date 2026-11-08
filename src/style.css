@@ -255,3 +255,34 @@ body.pl-hide #rail:not(:has(.on)){opacity:0;pointer-events:none}
 #rail>#mm-btn{background:linear-gradient(145deg,#e8620f,#f5821f);border:2px solid #ffd2a3;box-shadow:0 4px 16px #0008,0 0 18px #f5821f66}
 #bagbtn .bd{position:absolute;top:-4px;right:-4px;min-width:19px;height:19px;padding:0 5px;border-radius:10px;display:grid;place-items:center;font-size:11px;font-weight:700;font-style:normal;line-height:1;color:#fff;background:#e5322d;border:2px solid #161a3a}
 #volpanel label span{display:flex;align-items:center;gap:8px}#volpanel label span .lc{width:16px;height:16px;flex:none;opacity:.85}
+
+/* ═════════ Layout fixes ═════════ */
+/* (3) Bottom panels: the dark fade now starts at the very bottom edge of the screen (no gap under it).
+       The old "bottom:18px" offset moved into padding, so buttons keep the same position but the shadow reaches the edge. */
+#inv,#st-ban{bottom:0!important;padding-bottom:max(18px,env(safe-area-inset-bottom))!important;padding-top:34px;background:linear-gradient(#0000,#0b0d1cd9 55%,#0b0d1cf2)}
+#door-ui{bottom:0!important;inset:auto 0 0 0;padding-bottom:max(20px,env(safe-area-inset-bottom))}
+#mv-card{bottom:calc(118px + env(safe-area-inset-bottom))}
+
+/* (4) Avatar page + hall: every top button has its own lane, nothing overlaps.
+       Left lane  = rail (sound · snacks · memes), 46 px wide.   Right lane = icon bar / avatar-view buttons.
+       The avatar page header (Twin Cinema's / Animate / PNG) now starts to the right of the left rail. */
+:root{--rail-w:46px;--lane-gap:12px;--after-rail:calc(var(--rail-left) + var(--rail-w) + var(--lane-gap))}
+#st-user,#st-anim,.stsq{left:var(--after-rail)!important}
+#st-user{top:var(--rail-top)!important;min-height:var(--rail-w);align-items:center}
+#st-anim{top:calc(var(--rail-top) + var(--rail-w) + 8px)!important}
+.stsq{top:calc(var(--rail-top) + var(--rail-w) + 8px + 38px)!important}
+#st-rail{top:var(--rail-top)!important;right:max(10px,env(safe-area-inset-right))!important;gap:10px}
+#st-rail button{width:var(--rail-w);height:var(--rail-w)}
+/* hall: right icon bar — same size as the left rail, same top line, top-aligned, wraps neatly to a 2nd column on short phones */
+#bar{top:var(--rail-top)!important;bottom:max(14px,env(safe-area-inset-bottom))!important;justify-content:flex-start!important;align-content:flex-start;gap:10px!important;
+ right:max(10px,env(safe-area-inset-right))!important}
+#bar button,#bar .btn{width:var(--rail-w)!important;height:var(--rail-w)!important;flex:none}
+@media (max-height:520px){
+ :root{--rail-w:40px;--lane-gap:10px}
+ #bar{gap:7px!important}#rail{gap:8px}
+ #rail>button{width:var(--rail-w);height:var(--rail-w);font-size:18px}
+ #bar button,#bar .btn{font-size:17px}
+ #st-rail{gap:8px}
+}
+/* the toast / tip line sits between the two lanes, never under a button */
+#tip{left:calc(var(--after-rail) + 4px);right:calc(var(--rail-w) + 24px)}

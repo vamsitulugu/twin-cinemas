@@ -38,6 +38,45 @@ export async function fetchBalance(){if(!APP)return null;
 export async function payOrder(o){const {ok,j}=await post('/canteen/order',{clientId:o.id,for:o.for,lines:o.lines});
  return ok?{ok:true,balance:j.balance}:{ok:false,error:j.error,code:j.code,balance:j.balance,need:j.need}}
 export const markEnded=()=>{if(APP&&APP.host)post('/status',{status:'ended'}).catch(()=>{})};
+/* ---- auto-share: upload the movie ONCE so the partner never has to choose it again ----
+   src = File/Blob, or {url} (the Android app's own stream). Uses the backend's R2 multipart flow (POST /api/cinema/:id/share/...).
+   Resolves {ok:true,already?} or {ok:false,code} where code is PRO_REQUIRED | NO_STORAGE | TOO_LARGE | NO_SPACE | BUSY | NETWORK | CANCELLED — the caller then simply keeps the normal "choose your copy" flow.
+   The movie bucket needs CORS for this site (PUT, header Content-Type, expose ETag) — see CINEMA_FLOW.md. */
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+export function shareToCloud(src,{title,dur,onProgress}={}){
+ let cancelled=false;const xhrs=new Set();
+ const cancel=()=>{cancelled=true;xhrs.forEach(x=>{try{x.abort()}catch(e){}})};
+ const run=async()=>{
+  if(!APP)return{ok:false,code:'NO_APP'};
+  // size + a way to read byte ranges, for a File/Blob or for the app's virtual-host URL
+  let size=0,read;
+  if(src instanceof Blob){size=src.size;read=(a,b)=>Promise.resolve(src.slice(a,b))}
+  else if(src&&src.url){
+   const r0=await fetch(src.url,{headers:{Range:'bytes=0-0'}});const cr=r0.headers.get('content-range'),m=/\/(\d+)$/.exec(cr||'');
+   size=m?+m[1]:+r0.headers.get('content-length')||0;if(r0.status!==206&&!m)return{ok:false,code:'NO_RANGE'};
+   read=async(a,b)=>{const r=await fetch(src.url,{headers:{Range:'bytes='+a+'-'+(b-1)}});if(r.status!==206&&r.status!==200)throw new Error('read');return r.blob()}}
+  else return{ok:false,code:'NO_SOURCE'};
+  if(!size)return{ok:false,code:'NO_SOURCE'};
+  const name=String(title||'Movie'),mime=(src instanceof Blob&&src.type)||'video/mp4';
+  const ini=await post('/share/init',{title:name,size,mime,durationSec:dur});
+  if(!ini.ok)return{ok:false,code:ini.j&&ini.j.code||'HTTP_'+(ini.j&&ini.j.error||'')};
+  if(ini.j.already)return{ok:true,already:true};
+  const {movieId,partSize,totalParts}=ini.j,etags=new Array(totalParts),done=new Array(totalParts).fill(0);let next=1,failed=null;
+  const report=()=>{const b=done.reduce((a,c)=>a+c,0);onProgress&&onProgress(Math.min(1,b/size))};
+  const putPart=(url,blob,idx)=>new Promise((res,rej)=>{const x=new XMLHttpRequest();xhrs.add(x);x.open('PUT',url);
+   x.upload.onprogress=e=>{done[idx]=e.loaded;report()};
+   x.onload=()=>{xhrs.delete(x);if(x.status>=200&&x.status<300){const t=x.getResponseHeader('ETag');if(!t)return rej(new Error('NO_ETAG'));done[idx]=blob.size;report();res(t)}else rej(new Error('HTTP '+x.status))};
+   x.onerror=()=>{xhrs.delete(x);rej(new Error('NETWORK'))};x.onabort=()=>{xhrs.delete(x);rej(new Error('ABORTED'))};x.send(blob)});
+  const worker=async()=>{while(!cancelled&&!failed){const n=next++;if(n>totalParts)return;const a=(n-1)*partSize,b=Math.min(size,a+partSize);
+    for(let at=0;;at++){try{if(cancelled)throw new Error('ABORTED');
+      const sg=await post('/share/'+movieId+'/parts',{partNumbers:[n]});if(!sg.ok)throw new Error('sign');
+      const blob=await read(a,b);etags[n-1]=await putPart(sg.j.urls[n],blob,n-1);break}
+     catch(e){done[n-1]=0;if(cancelled||e.message==='ABORTED'||e.message==='NO_ETAG'||at>=5){failed=e;return}await sleep(900*(at+1))}}}};
+  await Promise.all([worker(),worker(),worker()]);
+  if(cancelled||failed){post('/share/'+movieId+'/abort',{}).catch(()=>{});return{ok:false,code:cancelled?'CANCELLED':failed&&failed.message==='NO_ETAG'?'CORS':'NETWORK'}}
+  const fin=await post('/share/'+movieId+'/complete',{parts:etags.map((ETag,i)=>({PartNumber:i+1,ETag}))});
+  return fin.ok?{ok:true,movieId}:{ok:false,code:'COMPLETE'}};
+ return{cancel,done:run().catch(()=>({ok:false,code:'NETWORK'}))}}
 /* ---- embedded in the Twin Hearts app (e=1): talk to the page that holds us, only ever to/from the app's own origin ---- */
 const toApp=m=>{try{window.parent.postMessage({src:'twin-cinema',...m},APP.backOrigin)}catch(e){}};
 /** Leave to the app: closes the frame when embedded, otherwise goes to the back link. false = nothing to go back to. */
@@ -72,10 +111,12 @@ export function mountInvite(ctx){
  let phase=APP.invited?'invited':'lobby',msg='',inviting=false,started=false,poll=null;       // phase: lobby | invited | declined | expired
  const here=()=>!!ctx.sync()?.present;
  const mv=()=>ctx.movie?.()||{};
- const needsPick=()=>{const m=mv();return m.info&&m.info.mode==='device'&&!m.loaded&&!waitFile};
+ const needsPick=()=>{const m=mv();return m.info&&m.info.mode==='device'&&!m.loaded&&!waitFile&&!(m.share&&m.share.partner)};
  function status(){
   const m=mv();if(ONLINE&&m.info&&m.info.mode!=='none'){
    if(m.info.mode==='device'&&!m.loaded&&waitFile)return'Loading your movie…';
+   if(m.share&&m.share.partner&&!m.loaded)return'Your partner is sharing the movie with you… '+Math.round((m.share.pct||0)*100)+'%';
+   if(m.share&&m.share.mine&&m.loaded&&!m.ready)return'Sharing the movie with your partner… '+Math.round((m.share.pct||0)*100)+'%';
    if(needsPick())return m.bad||'Choose your copy of “'+(m.info.title||'the movie')+'” (the same one you picked in Twin Hearts)';
    if(m.loaded&&!m.ready&&here())return m.bad||'Waiting for your partner to choose the movie…'}
   if(!ONLINE)return'⚠ Live sync is not set up yet (missing Supabase keys) — your partner cannot join';
