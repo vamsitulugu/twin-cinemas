@@ -201,3 +201,8 @@ body.app #dstat{display:none}
 #mv-card .mv-s{color:#ffb15c;font-weight:700}#mv-card .mv-t{background:#2fbf5b;color:#06210f;font-weight:700;border-radius:999px;padding:1px 9px}
 #mv-card p{margin:0;font-size:12.5px;line-height:1.45;color:#d8dcf5;display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden}
 #mv-card .mv-o{color:#d8dcf5;background:#ffffff14;border-radius:999px;padding:1px 9px}#mv-card .mv-r{flex-wrap:wrap}
+
+/* lobby crowd (src/crowd.js): speech bubbles over people, and the public-address banner */
+.bubble.npc{background:#fffffff0;color:#23213a;font-size:13px;line-height:1.3;padding:6px 11px;border-radius:14px;box-shadow:0 2px 8px #0006;z-index:5;white-space:normal;width:max-content;max-width:190px;text-align:center}
+.pa{position:fixed;left:50%;top:max(66px,calc(env(safe-area-inset-top) + 58px));transform:translate(-50%,-10px);z-index:7;max-width:min(560px,calc(100% - 28px));padding:9px 16px;border-radius:14px;font-size:13.5px;line-height:1.35;text-align:center;color:#fff;background:#1a1d3cf0;border:1px solid var(--line);box-shadow:0 6px 20px #0008;opacity:0;pointer-events:none;transition:opacity .4s,transform .4s}
+.pa.on{opacity:1;transform:translate(-50%,0)}

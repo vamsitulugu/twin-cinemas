@@ -156,7 +156,7 @@ export function buildHall(scene,renderer){
  sign(0,y0+2.75,DOOR_Z-.03,Math.PI);
 
  const push=(p,r,b)=>{const cx2=cl(p.x,b.x0,b.x1),cz=cl(p.z,b.z0,b.z1),dx=p.x-cx2,dz=p.z-cz,d=Math.hypot(dx,dz);if(d<r){if(d>1e-4){p.x=cx2+dx/d*r;p.z=cz+dz/d*r}else p.z=b.z0-r}};
- const api={lobby,lobbyMode:false,dims:()=>dims,seats,taken,door,screen,cL,cR,picks,floors:[flat,...treads],setScreen,fitScreen:a=>setScreen(kind,a),setScreenMap(t){screenMat.map=t||stex;screenMat.needsUpdate=true},sizes:Object.keys(SIZES),
+ const api={lobby,lobbyMode:false,discs:[],dims:()=>dims,seats,taken,door,screen,cL,cR,picks,floors:[flat,...treads],setScreen,fitScreen:a=>setScreen(kind,a),setScreenMap(t){screenMat.map=t||stex;screenMat.needsUpdate=true},sizes:Object.keys(SIZES),
   setDoor(u){leaves[0].position.x=-DW/2-u*DW*.95;leaves[1].position.x=DW/2+u*DW*.95},
   /** house=1 full lights, 0.07 movie dark */
   setLights(v){lobby.setLights(v);hemi.intensity=.06+.64*v;spot.intensity=60*v;lamps.forEach(l=>l.intensity=.7*v);bayLights.forEach(l=>l.intensity=9*v);warm.emissiveIntensity=.12+.88*v;washMats.forEach(m=>m.opacity=.1+.8*v);
@@ -175,6 +175,8 @@ export function buildHall(scene,renderer){
   /** walking route to a seat: sideways to the nearest aisle, along the aisle, then along the row gap */
   route(p,seat){const side=Math.abs(seat.x)>.35?Math.sign(seat.x):(p.x<0?-1:1),ax=side*AISLE_X,pts=[];if(Math.abs(p.x-ax)>.3)pts.push([ax,p.z]);pts.push([ax,seat.aisle.z],[seat.x,seat.aisle.z]);return pts},
   /** keep a point (radius r) inside the hall and out of seat blocks */
-  resolve(p,r=.25,zMax=DOOR_Z-.4){if(api.lobbyMode){p.x=cl(p.x,-LW+.5,LW-.5);p.z=cl(p.z,DOOR_Z+.9,DOOR_Z+LD-.5);for(const b of lobby.boxes)push(p,r,b);return}
+  resolve(p,r=.25,zMax=DOOR_Z-.4){if(api.lobbyMode){p.x=cl(p.x,-LW+.5,LW-.5);p.z=cl(p.z,DOOR_Z+.9,DOOR_Z+LD-.5);for(const b of lobby.boxes)push(p,r,b);
+   for(const d of api.discs){const dx=p.x-d.x,dz=p.z-d.z,rr=d.r+r,q=dx*dx+dz*dz;if(q<rr*rr&&q>1e-6){const k=rr/Math.sqrt(q);p.x=d.x+dx*k;p.z=d.z+dz*k}}   // the lobby crowd (see crowd.js) is solid
+   return}
    p.x=cl(p.x,-HALF+.3,HALF-.3);p.z=cl(p.z,FRONT_Z+1,zMax);for(const b of boxes)push(p,r,b)}};
  return api}

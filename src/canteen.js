@@ -68,7 +68,7 @@ const money=n=>CUR+n,esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&l
 const dot=v=>v===1?'<i class="vd v"></i>':v===0?'<i class="vd n"></i>':'';
 let uid=1;
 
-/** hooks: onReady(order) when food is on the counter, onGift(lines) to send items to the partner, onBag({popcorn,drink}) when held items change,
+/** hooks: onOrder(order) when an order is placed (the seller starts working), onReady(order) when food is on the counter, onGift(lines) to send items to the partner, onBag({popcorn,drink}) when held items change,
     canGift() -> bool (partner is here), say(text) -> status line, sfx(name) */
 export function createCanteen(h={}){
  let cat='popcorn',orderFor='me',open=false,cart=[],bag=[],view='menu',busy=false;
@@ -121,7 +121,7 @@ export function createCanteen(h={}){
  /* placing the order: preparing -> ready on the counter */
  function place(){if(!cart.length||busy)return;busy=true;const order={code:String(100+Math.floor(Math.random()*900)),lines:cart,for:orderFor,total:total()};
   const mine=order.for!=='partner';
-  body.innerHTML=`<div class="cn-prep"><div class="big">👩‍🍳</div><h3>Order #${order.code}</h3><p>Preparing your order…</p><div class="bar"><i></i></div></div>`;foot.innerHTML='';h.sfx?.('bell');
+  body.innerHTML=`<div class="cn-prep"><div class="big">👩‍🍳</div><h3>Order #${order.code}</h3><p>Preparing your order…</p><div class="bar"><i></i></div></div>`;foot.innerHTML='';h.sfx?.('bell');h.onOrder?.(order);
   setTimeout(()=>{busy=false;const kinds=order.lines.flatMap(l=>Array(Math.min(3,l.qty)).fill(0).flatMap(()=>l.item.vis2||[l.item.vis]));
    cart=[];orderFor='me';view='menu';close();
    addBag(order.lines,mine);

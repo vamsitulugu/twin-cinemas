@@ -28,6 +28,12 @@ export function randomLook(kind){const hair=pick(HAIR),sk=pick(SKIN);
  return{skin:sk,top:pick(TOP),bottom:pick(BOT),shoes:pick(SHOE),hair,cap:pick(TOP),
   hue:rnd(0,6.28),height:(kind==='f'||kind==='of')?rnd(1.54,1.7):rnd(1.64,1.86),head:[rnd(.93,1.07),rnd(.95,1.06),rnd(.93,1.07)],
   beard:kind!=='f'&&kind!=='of'&&Math.random()<.35,capOn:kind==='rpm'&&Math.random()<.3}}
+/** Lobby crowd: every person different. Tops are dealt from a shuffled deck, so nobody in the lobby wears the same colour as someone else.
+    role 'staff' = canteen uniform (red top, black trousers). minSkin = lightest skin allowed (models with hair painted on the head keep dark hair that way). */
+let deck=[];const nextTop=()=>{if(!deck.length)deck=TOP.map(v=>[Math.random(),v]).sort((a,b)=>a[0]-b[0]).map(x=>x[1]);return deck.pop()};
+export function crowdLook(kind,role,minSkin=0){const l=randomLook(kind),sk=pick(SKIN.slice(Math.max(0,Math.min(minSkin||0,SKIN.length-1))));
+ if(role==='staff')return{...l,skin:sk,top:0xb3121b,bottom:0x17181c,shoes:0x17171a,hair:pick([0x0d0b0a,0x1a1210,0x2b1b13]),beard:false,capOn:false,height:kind==='f'?rnd(1.58,1.68):rnd(1.7,1.8)};
+ return{...l,skin:sk,top:nextTop()}}
 /** Apply a look to every mesh of a cloned avatar by mesh name (MetaPerson: outfit_*, haircut, Avatar*; RPM: Wolf3D_*). */
 export function applyLook(root,l){root.traverse(k=>{if(!k.isMesh)return;const n=k.name,mt=k.material;
  if(/^Ch03/.test(n)){k.material=dyeAuto(mt,skinMul(l.skin),l.hue);return}

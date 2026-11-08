@@ -1,5 +1,5 @@
 // Tiny synthesized sound kit (no audio files): room tone, door, chat blip, crunch, chime. Call audio.init() from a user gesture.
-let ctx,master,amb,musicGain,crowdGain,songEl=null,songsOn=false,crowdOn=false,stepFlip=0,mixT={songs:0,crowd:0},memeGain,memeId=0,memeCur=null,memeBuf=new Map(),duck=1,muted=false,mixS=2,bgmScale=1,list=[],order=[],oi=0;
+let ctx,master,amb,murG,musicGain,crowdGain,songEl=null,songsOn=false,crowdOn=false,stepFlip=0,mixT={songs:0,crowd:0},memeGain,memeId=0,memeCur=null,memeBuf=new Map(),duck=1,muted=false,mixS=2,bgmScale=1,list=[],order=[],oi=0;
 const env=(g,t,a,d)=>{g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(a,t+.01);g.gain.exponentialRampToValueAtTime(.0001,t+d)};
 function tone(f,d,type='sine',a=.2,t0=0,to){if(!ctx)return;const t=ctx.currentTime+t0,o=ctx.createOscillator(),g=ctx.createGain();o.type=type;o.frequency.setValueAtTime(f,t);if(to)o.frequency.exponentialRampToValueAtTime(to,t+d);env(g,t,a,d);o.connect(g).connect(master);o.start(t);o.stop(t+d+.05)}
 function burst(d,a=.3,f=3000,t0=0){if(!ctx)return;const t=ctx.currentTime+t0,n=ctx.createBufferSource(),b=ctx.createBuffer(1,ctx.sampleRate*d,ctx.sampleRate),x=b.getChannelData(0);for(let i=0;i<x.length;i++)x[i]=Math.random()*2-1;n.buffer=b;
@@ -62,6 +62,13 @@ export const audio={
  crunch(){for(let i=0;i<4;i++)burst(.07,.25,2500+Math.random()*2000,i*.11)},
  chime(){tone(523,1.2,'sine',.15);tone(659,1.2,'sine',.12,.18);tone(784,1.6,'sine',.12,.36)},
  heart(){tone(660,.2,'triangle',.1,0,990)},
+ /** lobby life: a popcorn pop, the till bell, and the murmur of a busy foyer (murmur(0) switches it off) */
+ pop(){burst(.05,.05,1800+Math.random()*1800)},
+ ching(){tone(2093,.6,'sine',.07);tone(2637,.5,'sine',.05,.07)},
+ murmur(v){if(!ctx)return;if(!murG){const b=ctx.createBuffer(1,ctx.sampleRate*3,ctx.sampleRate),d=b.getChannelData(0);let y=0;for(let i=0;i<d.length;i++){y=y*.92+(Math.random()*2-1)*.08;d[i]=y*3}
+   const n=ctx.createBufferSource();n.buffer=b;n.loop=true;const f=ctx.createBiquadFilter();f.type='bandpass';f.frequency.value=520;f.Q.value=.5;
+   const lfo=ctx.createOscillator(),lg=ctx.createGain();lfo.frequency.value=.23;lg.gain.value=.012;murG=ctx.createGain();murG.gain.value=0;lfo.connect(lg).connect(murG.gain);lfo.start();n.connect(f).connect(murG).connect(master);n.start()}
+  murG.gain.setTargetAtTime(v,ctx.currentTime,.7)},
  add(){tone(740,.08,'sine',.1);tone(990,.1,'sine',.08,.06)},
  bell(){tone(1568,.9,'sine',.12);tone(2093,.7,'sine',.06,.01)},
  gift(){tone(523,.25,'triangle',.12);tone(784,.25,'triangle',.1,.12);tone(1046,.5,'triangle',.1,.24)},

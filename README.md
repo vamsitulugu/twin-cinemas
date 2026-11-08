@@ -18,6 +18,9 @@ Each of you picks the SAME video file with "Choose movie". Only controls sync (s
 ## Controls
 WASD / arrows / tap floor / on-screen joystick (phones) to walk; drag to look; tap a seat then Sit here. Menu: Start, Pause, Break, Screen, Full screen, 360, Sound, Popcorn, emotes, chat, Leave.
 
+## Player controls (while the movie plays, is paused or on a break)
+src/controls.js draws the cinema player: back (screen / your seat), title + who paused, sound, full screen, back 10 s / play-pause / forward 10 s, 😊 reactions, a red seek bar, and a bottom row: Sync, Message (chat), Log (activity + chat), Voice, Video, End, More (camera, view picker, break, popcorn, alerts, leave, choose movie file). It fades out after 3.5 s while playing; tap or move to bring it back. Keys: Space/K play-pause, ←/J and →/L = 10 s, M sound, F full screen, V views. Voice and Video are buttons only for now (c.hooks.voice / c.hooks.video in main.js).
+
 ## Structure
 src/state.js   story state machine (door > enter > explore > seated > watch <> paused/break > end)
 src/hall.js    hall, seats, screen, curtains, lobby, lighting, collision
@@ -31,3 +34,6 @@ src/studio.js  outside-the-theatre navy studio screen (couple avatars, Animate /
 src/look.js    per-part recolouring so each audience member differs (skin, hair, top, trousers, shoes)
 public/models  couple_f.glb (Person 1) + couple_m.glb (Person 2) = your MetaPerson avatars (only used for the two of you); aud_a/aud_b/aud_c + avatar_m = four different audience people (sample avatars from the open-source TalkingHead repo)
 public/models/audience  drop more MetaPerson .glb files here + list them in index.json for extra faces
+
+## Lobby crowd (src/crowd.js)
+The lobby / canteen is now busy: 2 canteen sellers in uniform and caps (scoop popcorn, work the till, greet you, hand over your order), people queueing at both counters, friends chatting in circles (talking mouths, hand gestures, speech bubbles) who go to buy snacks and come back, visitors browsing posters / menu, taking selfies, checking the time at the hall door, and public-address announcements with a chime. Everyone has their own face, skin, hair and clothes (src/look.js `crowdLook`). The crowd only exists and updates while the couple is in the lobby; the couple cannot walk through people (`hall.discs`). New avatar controls for this are documented at `makeAvatar` in src/avatar.js (`av.act`, `av.talk`, `av.tly/tlp`, `av.wear`). New sounds in src/audio.js: `pop`, `ching`, `murmur`.

@@ -8,7 +8,8 @@ import {createSync,ONLINE} from './net.js';
 import {Movie,fmt} from './video.js';
 import {audio} from './audio.js';
 import {createCanteen} from './canteen.js';
-import {COUNTER_Z} from './lobby.js';
+import {COUNTER_Z,LW,LD} from './lobby.js';
+import {createLobbyCrowd} from './crowd.js';
 import {createStudio} from './studio.js';
 import {createPlayer} from './controls.js';
 import {APP,mountInvite,markEnded,fetchMovieInfo,leaveApp,handshake,fetchLibrary} from './invite.js';
@@ -28,6 +29,8 @@ const hall=buildHall(scene,renderer),rig=new CameraRig(camera,renderer.domElemen
 const movie=new Movie();
 let gl;try{gl=await loadAvatars(p=>$('loading').textContent='LOADING THEATRE… '+Math.round(p*100)+'%')}catch(e){$('loading').textContent='Could not load avatars: '+e.message;throw e}
 const aud=seatAudience(scene,hall,gl),studio=createStudio(renderer,gl);studio.on=true;try{await renderer.compileAsync(scene,camera);hall.setRoom(true);await renderer.compileAsync(scene,camera);hall.setRoom(false)}catch(e){hall.setRoom(false)}
+/* the lobby crowd: canteen sellers, queues, friends chatting. Only exists (and only costs anything) while the couple is in the lobby. The counter itself is left out of the obstacles so the sellers can stand behind it. */
+const crowd=createLobbyCrowd(scene,gl,{y0:floorY(DOOR_Z),DOOR_Z,boxes:hall.lobby.boxes.filter(b=>b.x1-b.x0<9),LW,LD,audio,hall});crowd.setActive(true);
 const SONGS=[1,2,3,4].map(i=>`/audio/lobby-${i}.mp3`),CROWD='/audio/hall-crowd.mp3';
 // loudness of the two layers in each place. outside = lobby / canteen, in = inside the hall, watch = while the movie plays
 const MIX={out:{songs:.25,crowd:0},in:{songs:.25,crowd:.5},watch:{songs:0,crowd:0}};
@@ -38,7 +41,8 @@ let bagPrev={popcorn:false,drink:false};
 const canteen=createCanteen({canGift:()=>!!sync?.present,sfx:n=>audio[n]?.(),
  onBag(st){if(!me)return;if(st.popcorn!==bagPrev.popcorn){me.setPop(st.popcorn);sync?.send({t:'pop',on:st.popcorn})}if(st.drink!==bagPrev.drink)me.setDrink(st.drink);bagPrev={...st};buttons()},
  onGift:items=>sync?.send({t:'order',items}),
- onReady:(order,kinds,mine)=>{if(mine)hall.lobby.showTray(kinds)},
+ onOrder:()=>crowd.orderPlaced(me?.pos.x??0),
+ onReady:(order,kinds,mine)=>{if(mine)hall.lobby.showTray(kinds);crowd.orderReady(me?.pos.x??0)},
  onClose:()=>{if(m.state===S.DOOR)hint(LOBBY_TIP)}});
 const LOBBY_TIP='Walk anywhere (WASD / tap the floor) · stand at the counter to order · walk through the door to go in';
 const COL={1:0xff5c8a,2:0x4db2ff},KIND={1:['cf',1.68],2:['cm',1.8]},LX={1:-.5,2:.5};
@@ -67,7 +71,7 @@ function buttons(){bar.innerHTML='';const s=m.state;
  if([S.EXPLORE,S.SEATED].includes(s))bar.appendChild(fileLabel);      // while watching, the player's More menu holds the file picker
  if(me&&!m.is(S.DOOR,S.ENTER)){bar.append(...RAIL)}          // chat / alerts / leave live in the same right-hand rail
  if(view==='full'){bar.innerHTML='';B('✕','Exit full screen',exitFull)}}
-m.on(async(s,p)=>{const ui=$('door-ui'),ov=$('ov');ui.style.display=s===S.DOOR?'flex':'none';ov.style.display='none';hall.lobbyMode=s===S.DOOR;if(s!==S.DOOR&&canteen.isOpen)canteen.close();
+m.on(async(s,p)=>{const ui=$('door-ui'),ov=$('ov');ui.style.display=s===S.DOOR?'flex':'none';ov.style.display='none';hall.lobbyMode=s===S.DOOR;crowd.setActive(s===S.DOOR||s===S.ENTER);if(s!==S.DOOR&&canteen.isOpen)canteen.close();
  if(s===S.DOOR){setView('door');tip()}
  if(s===S.ENTER){tip('');await openDoor();setView('follow',{yaw:0,pitch:.55,dist:4});hall.lobby.hideTray();await me.walk([[LX[role],DOOR_Z+1.2],[LX[role],DOOR_Z-1]]);m.go(S.EXPLORE)}
  if(s===S.EXPLORE){hall.setRoom(true);hint('WASD / arrows or tap the floor to walk · drag to look · tap a seat');if(p===S.SEATED)setView('follow',{pitch:.55,dist:4})}
@@ -106,7 +110,7 @@ async function partnerSit(id){const seat=hall.seats.get(id);if(!seat||!partner||
  if(m.is(S.DOOR,S.ENTER)||partner.pos.z>DOOR_Z+.1)partner.snapSit(seat);else{await partner.walk(hall.route(partner.pos,seat));await partner.sit(seat)}buttons()}
 async function partnerStand(){const s=partnerSeat;if(!s)return;partnerSeat=null;hall.taken.delete(s.id);hall.setSeatHighlight(s.id,0);await partner.stand(s);partner.busy=false;buttons()}
 const snap=()=>({x:me.pos.x,z:me.pos.z,r:me.group.rotation.y,w:me.av.walk?1:0,s:mySeat?.id||null,pc:me.popcorn?1:0,dr:me.drink?1:0});
-async function join(r){if(role)return;role=r;leaveStudio();audio.init();audio.music(SONGS);audio.crowd(CROWD);audio.mix(MIX.out,2);$('door-ui').classList.add('joined');const code=$('room').value.trim()||location.hash.slice(1)||'lobby';history.replaceState(0,'','#'+code);
+async function join(r){if(role)return;role=r;leaveStudio();audio.init();audio.music(SONGS);audio.crowd(CROWD);audio.mix(MIX.out,2);crowd.active&&audio.murmur(.08);$('door-ui').classList.add('joined');const code=$('room').value.trim()||location.hash.slice(1)||'lobby';history.replaceState(0,'','#'+code);
  document.querySelectorAll('#roles button').forEach(b=>b.classList.toggle('on',+b.dataset.r===r));$('room').disabled=true;stat('Connecting…');
  const mk=q=>{const[k,h]=KIND[q],p=spawn(k,h,COL[q],LX[q]);p.onStep=stepSfx;return p};me=mk(r);partner=mk(3-r);partner.group.visible=false;
  setView('follow',{yaw:0,pitch:.5,dist:4.5});canteen.showBag(true);hint(LOBBY_TIP);
@@ -248,13 +252,13 @@ renderer.setAnimationLoop(()=>{const raw=clock.getDelta(),dt=Math.min(raw,.05),t
   else if(target){dx=target.x-me.pos.x;dz=target.z-me.pos.z;const d=Math.hypot(dx,dz);if(d<.12){target=null;dx=dz=0}else k=Math.max(.3,Math.min(1,d/1.1))}
   me.move(dx,dz,dt,hall,k)}
  if(me&&m.state===S.DOOR&&!me.script&&!canteen.isOpen&&!me.seated){const lx=me.pos.x,lz=me.pos.z-DOOR_Z,nearC=lz>COUNTER_Z-.7&&Math.abs(lx)<3.5;
-  if(nearC&&!atCounter){atCounter=true;target=null;me.face(0,1);canteen.open()}else if(!nearC&&lz<COUNTER_Z-1.4)atCounter=false;
+  if(nearC&&!atCounter){atCounter=true;target=null;me.face(0,1);canteen.open();crowd.greet(me.pos.x)}else if(!nearC&&lz<COUNTER_Z-1.4)atCounter=false;
   if(lz<1.25&&Math.abs(lx)<1&&role&&!APP)startEnter()}
  movie.tick(dt);const now=performance.now();if(role===1&&sync?.present&&m.state===S.WATCH&&now-lastSync>3000){lastSync=now;sync.send({t:'sync',vt:movie.time,pl:movie.playing})}
  if(movie.dur&&now-lastUI>200){lastUI=now;const v=movie.time/movie.dur*1000,tc=fmt(movie.time),td=fmt(movie.dur);if(!UI.sk.matches(':active'))UI.sk.value=v;if(!UI.fsk.matches(':active'))UI.fsk.value=v;
   if(UI.tcT!==tc){UI.tcT=tc;UI.tc.textContent=UI.ftc.textContent=tc}if(UI.tdT!==td){UI.tdT=td;UI.td.textContent=td}pl.tick()}
  aud.forEach(a=>a.update(dt,t));if(me){me.update(dt,t);partner.update(dt,t);rig.ctx.me.copy(me.pos);rig.ctx.couple.copy(me.pos);if(partner.group.visible)rig.ctx.couple.add(partner.pos).multiplyScalar(.5);sync?.tick(performance.now(),me.av.walk,snap)}{const cx=rig.ctx,[sw,sh]=hall.dims();cx.sw=sw;cx.sh=sh;cx.sy=hall.screen.position.y;if(me){cx.chatT.copy(me.pos);if(partner.group.visible&&me.pos.distanceTo(partner.pos)<2.6)cx.chatT.add(partner.pos).multiplyScalar(.5);if(now-lastPlace>1000){lastPlace=now;placeChat()}}}
- rig.ctx.seated=!!(me&&me.seated);rig.ctx.taken=hall.taken;rig.ctx.mine=mySeat?.id||null;rig.ctx.lobbyY=floorY(DOOR_Z);rig.ctx.lobby=m.state===S.DOOR;if(m.is(S.DOOR,S.ENTER))hall.lobby.update(t);
+ rig.ctx.seated=!!(me&&me.seated);rig.ctx.taken=hall.taken;rig.ctx.mine=mySeat?.id||null;rig.ctx.lobbyY=floorY(DOOR_Z);rig.ctx.lobby=m.state===S.DOOR;if(m.is(S.DOOR,S.ENTER)){hall.lobby.update(t);crowd.update(dt,t,camera,[me,partner&&partner.group.visible?partner:null])}
  {const fr=hall.lobby.frames,k=m.state===S.DOOR&&me&&!me.seated?fr.near(me.pos):-1;fr.hold=k>=0;mvCard(k>=0?fr.movie(k):null)}
  bubbleTick(now);if(!(movie.src&&m.is(S.WATCH,S.PAUSED,S.BREAK,S.END))&&now-lastScr>66){lastScr=now;hall.drawScreen(t,m.is(S.WATCH,S.PAUSED,S.BREAK),movie.dur?movie.time/movie.dur:0)}
  rig.update(dt,t);
@@ -262,7 +266,7 @@ renderer.setAnimationLoop(()=>{const raw=clock.getDelta(),dt=Math.min(raw,.05),t
  else{renderer.shadowMap.autoUpdate=false;shAcc+=dt;const dyn=!!me&&(moving(me)||(partner.group.visible&&moving(partner)));
   if(m.state!==S.DOOR&&(dyn||shAcc>=(m.is(S.WATCH)?.5:.25))){shAcc=0;renderer.shadowMap.needsUpdate=true}renderer.render(scene,camera)}
  });
-addEventListener('pointerdown',()=>{audio.init();audio.music(SONGS);audio.crowd(CROWD)},{once:true,capture:true});
+addEventListener('pointerdown',()=>{audio.init();audio.music(SONGS);audio.crowd(CROWD);crowd.active&&audio.murmur(.08)},{once:true,capture:true});
 let inv=null,memes=null;
 memes=createMemes({audio,send:m=>sync?.send(m),present:()=>!!sync?.present});     // the 😂 meme-sound button (studio, lobby, hall)
 await wait(300);$('loading').classList.add('off');m.go(S.DOOR);setView('door');$('door-ui').style.display='flex';
