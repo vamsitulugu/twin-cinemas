@@ -27,6 +27,8 @@ const hall=buildHall(scene,renderer),rig=new CameraRig(camera,renderer.domElemen
 const movie=new Movie();
 let gl;try{gl=await loadAvatars(p=>$('loading').textContent='LOADING THEATRE… '+Math.round(p*100)+'%')}catch(e){$('loading').textContent='Could not load avatars: '+e.message;throw e}
 const aud=seatAudience(scene,hall,gl),studio=createStudio(renderer,gl);studio.on=true;try{await renderer.compileAsync(scene,camera);hall.setRoom(true);await renderer.compileAsync(scene,camera);hall.setRoom(false)}catch(e){hall.setRoom(false)}
+const BGM_URL='/audio/theatre-bgm.mp3',BGM_VOL=.1,BGM_WATCH=0;     // BGM_URL=null -> built-in soft pad; BGM_WATCH>0 keeps music under the movie too
+const stepSfx=who=>{const d=who===me?0:Math.hypot(who.pos.x-me.pos.x,who.pos.z-me.pos.z);audio.step(who.pos.z>DOOR_Z+.05?'floor':'carpet',who===me?.9:Math.max(0,.75-d*.09))};   // partner steps get quieter with distance
 const spawn=(kind,h,color,x)=>{const p=new Player(makeAvatar(gl[kind],{height:h,walker:true,relaxed:true,style:kind==='cf'?'f':'m'}),color);scene.add(p.group);p.pos.set(x,floorY(DOOR_Z+1.9),DOOR_Z+1.9);p.group.rotation.y=Math.PI;return p};
 let me=null,partner=null,role=0,sync=null,partnerSeat=null,doorOpen=false;hall.lobbyMode=true;                                   // the hall starts with the couple outside, in the lobby
 let bagPrev={popcorn:false,drink:false};
@@ -101,9 +103,9 @@ async function partnerSit(id){const seat=hall.seats.get(id);if(!seat||!partner||
  if(m.is(S.DOOR,S.ENTER)||partner.pos.z>DOOR_Z+.1)partner.snapSit(seat);else{await partner.walk(hall.route(partner.pos,seat));await partner.sit(seat)}buttons()}
 async function partnerStand(){const s=partnerSeat;if(!s)return;partnerSeat=null;hall.taken.delete(s.id);hall.setSeatHighlight(s.id,0);await partner.stand(s);partner.busy=false;buttons()}
 const snap=()=>({x:me.pos.x,z:me.pos.z,r:me.group.rotation.y,w:me.av.walk?1:0,s:mySeat?.id||null,pc:me.popcorn?1:0,dr:me.drink?1:0});
-async function join(r){if(role)return;role=r;leaveStudio();audio.init();$('door-ui').classList.add('joined');const code=$('room').value.trim()||location.hash.slice(1)||'lobby';history.replaceState(0,'','#'+code);
+async function join(r){if(role)return;role=r;leaveStudio();audio.init();audio._mv=BGM_VOL;audio.music(BGM_URL);audio.musicVol(BGM_VOL,4);$('door-ui').classList.add('joined');const code=$('room').value.trim()||location.hash.slice(1)||'lobby';history.replaceState(0,'','#'+code);
  document.querySelectorAll('#roles button').forEach(b=>b.classList.toggle('on',+b.dataset.r===r));$('room').disabled=true;stat('Connecting…');
- const mk=q=>{const[k,h]=KIND[q],p=spawn(k,h,COL[q],LX[q]);return p};me=mk(r);partner=mk(3-r);partner.group.visible=false;
+ const mk=q=>{const[k,h]=KIND[q],p=spawn(k,h,COL[q],LX[q]);p.onStep=stepSfx;return p};me=mk(r);partner=mk(3-r);partner.group.visible=false;
  setView('follow',{yaw:0,pitch:.5,dist:4.5});canteen.showBag(true);hint(LOBBY_TIP);
  sync=await createSync(code,r,{
   onJoin(){partner.group.visible=true;stat('Your partner is in the lobby ♥');hint(m.state===S.DOOR?LOBBY_TIP:'');buttons()},
@@ -181,7 +183,7 @@ const pl=createPlayer({movie,fmt,
  mute:{get:()=>movie.muted,set:v=>{movie.muted=v}},
  more:()=>[['🎥 Next camera · '+viewLabel(),nextAngle],['🪟 Choose a view',openViews],
   [m.state===S.BREAK?'▶ End the break':'☕ Take a break',()=>m.go(m.state===S.BREAK?S.WATCH:S.BREAK)],
-  ['🍿 '+(me?.popcorn?'Put popcorn away':'Popcorn'),togglePop],[muted?'🔔 Alerts on':'🔕 Alerts off',toggleAlerts],['🚪 Leave theatre',leaveTheatre]],
+  ['🍿 '+(me?.popcorn?'Put popcorn away':'Popcorn'),togglePop],[muted?'🔔 Alerts on':'🔕 Alerts off',toggleAlerts],['🎵 Music on/off',()=>{audio.musicOn=audio.musicToggle()}],['🚪 Leave theatre',leaveTheatre]],
  reactions:()=>[['❤️','Send love',()=>emote('heart')],['👋','Wave',()=>emote('wave')],['👏','Clap',()=>emote('clap')],['🍿',me?.popcorn?'Put popcorn away':'Popcorn',togglePop]],
  log:()=>chatLog,extra:fileLabel,
  hooks:{message:()=>toggleChat()}});                                // voice / video: not built yet, the player shows "coming soon"
@@ -225,7 +227,7 @@ function doEmote(p,e){if(e==='wave')p.av.emote('wave');else{const ch=e==='heart'
 function emote(e){doEmote(me,e);sync?.send({t:'emo',e})}
 function leaveTheatre(){if(confirm('Leave the theatre?')){markEnded();sync?.close();if(!leaveApp())location.reload()}}$('leave').onclick=leaveTheatre;let muted=false;function toggleAlerts(){muted=!muted;audio.mute(muted);$('snd').textContent=muted?'🔕':'🔔'}$('snd').onclick=toggleAlerts;
 m.on((s,p)=>{$('top-r').style.display=s===S.DOOR?'none':(s===S.ENTER?'none':'flex');$('joy').style.display=s===S.EXPLORE&&matchMedia('(pointer:coarse)').matches?'block':'none';
- audio.ambient(s===S.WATCH?.015:.05);if(s===S.END)audio.chime()});
+ audio.ambient(s===S.WATCH?.015:.05);if(audio.musicOn!==false)audio.musicVol(s===S.WATCH?BGM_WATCH:BGM_VOL,s===S.WATCH?3:2);if(s===S.END)audio.chime()});
 {const joy=$('joy'),kn=joy.firstElementChild,mv=e=>{const r=joy.getBoundingClientRect(),dx=e.clientX-(r.left+55),dy=e.clientY-(r.top+55),d=Math.hypot(dx,dy),k=d>45?45/d:1;kn.style.transform=`translate(${dx*k}px,${dy*k}px)`;jx=dx*k/45;jz=dy*k/45};
  joy.addEventListener('pointerdown',e=>{joy.setPointerCapture(e.pointerId);mv(e)});joy.addEventListener('pointermove',e=>{if(e.buttons||e.pressure)mv(e)});const up=()=>{jx=jz=0;kn.style.transform=''};joy.addEventListener('pointerup',up);joy.addEventListener('pointercancel',up)}
 /* ---- smoothness: adaptive render scale. Watches the real frame time; if the device can't hold ~60 fps it quietly lowers the resolution a notch
@@ -257,6 +259,7 @@ renderer.setAnimationLoop(()=>{const raw=clock.getDelta(),dt=Math.min(raw,.05),t
  else{renderer.shadowMap.autoUpdate=false;shAcc+=dt;const dyn=!!me&&(moving(me)||(partner.group.visible&&moving(partner)));
   if(m.state!==S.DOOR&&(dyn||shAcc>=(m.is(S.WATCH)?.5:.25))){shAcc=0;renderer.shadowMap.needsUpdate=true}renderer.render(scene,camera)}
  });
+addEventListener('pointerdown',()=>{audio.init();audio.music(BGM_URL)},{once:true,capture:true});
 let inv=null;
 await wait(300);$('loading').classList.add('off');m.go(S.DOOR);setView('door');$('door-ui').style.display='flex';
 addEventListener('beforeunload',()=>sync?.close());
