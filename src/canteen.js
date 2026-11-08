@@ -72,7 +72,7 @@ let uid=1;
     canGift() -> bool (partner is here), say(text) -> status line, sfx(name) */
 export function createCanteen(h={}){
  let cat='popcorn',orderFor='me',open=false,cart=[],bag=[],view='menu',busy=false;
- const root=document.createElement('div');root.id='canteen';root.innerHTML=`<div class="cn-head"><b>🍿 TWIN CINEMA CANTEEN</b><span>Counter 1 · made fresh for the two of you</span><button class="cn-x" aria-label="Close">✕</button></div>
+ const root=document.createElement('div');root.id='canteen';root.innerHTML=`<div class="cn-head"><b>🍿 TWIN CINEMA’S CANTEEN</b><span>Counter 1 · made fresh for the two of you</span><button class="cn-x" aria-label="Close">✕</button></div>
   <div class="cn-tabs"></div><div class="cn-body"></div><div class="cn-foot"></div><div class="cn-sheet"></div>`;document.body.appendChild(root);
  const $=s=>root.querySelector(s),tabs=$('.cn-tabs'),body=$('.cn-body'),foot=$('.cn-foot'),sheet=$('.cn-sheet');
  const bagBtn=document.createElement('button');bagBtn.id='bagbtn';bagBtn.style.display='none';document.body.appendChild(bagBtn);

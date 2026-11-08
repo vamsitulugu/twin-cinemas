@@ -47,7 +47,11 @@ const canteen=createCanteen({canGift:()=>!!sync?.present,sfx:n=>audio[n]?.(),
  onClose:()=>{if(m.state===S.DOOR)hint(LOBBY_TIP)}});
 const LOBBY_TIP='Walk anywhere (WASD / tap the floor) · stand at the counter to order · walk through the door to go in';
 const COL={1:0xff5c8a,2:0x4db2ff},KIND={1:['cf',1.68],2:['cm',1.8]},LX={1:-.5,2:.5};
-const openDoor=()=>doorOpen?Promise.resolve():(doorOpen=true,tween(800,u=>hall.setDoor(u)));
+let doorIdle=0;
+const openDoor=()=>{if(doorOpen)return Promise.resolve();doorOpen=true;doorIdle=0;hall.doorTo(true,1);audio.doorPush();return new Promise(r=>setTimeout(r,650))};   // pushed open; resolves once it is nearly wide
+const closeDoor=()=>{if(!doorOpen)return;doorOpen=false;hall.doorTo(false)};hall.onDoorShut=()=>audio.doorShut();
+const doorLogic=dt=>{if(!doorOpen)return;const near=p=>p&&(p===me||p.group.visible)&&Math.abs(p.pos.z-DOOR_Z)<1.3&&Math.abs(p.pos.x)<1.7;doorIdle=near(me)||near(partner)||m.state===S.ENTER?0:doorIdle+dt;if(doorIdle>1.5)closeDoor()};   // the closer shuts it once nobody is in the doorway
+const pushHands=p=>{if(!p)return;const dz=p.pos.z-DOOR_Z,want=p.av.walk&&dz>-.3&&dz<.8&&Math.abs(p.pos.x)<1.2&&hall.doorAngle()<hall.doorOpenAngle*.8;if(want)p.av.act='push';else if(p.av.act==='push')p.av.act=''};   // arms forward while pushing the door
 const fsOn=()=>document.documentElement.requestFullscreen?.().catch(()=>{}),fsOff=()=>document.fullscreenElement&&document.exitFullscreen();
 /* state machine drives everything */
 let lit=1;const fade=(to,ms)=>{const a=lit;return tween(ms,u=>{lit=a+(to-a)*u;hall.setLights(lit)})};
@@ -73,8 +77,8 @@ function buttons(){bar.innerHTML='';const s=m.state;
  if(me&&!m.is(S.DOOR,S.ENTER)){bar.append(...RAIL)}          // chat / alerts / leave live in the same right-hand rail
  if(view==='full'){bar.innerHTML='';B('✕','Exit full screen',exitFull)}}
 m.on(async(s,p)=>{const ui=$('door-ui'),ov=$('ov');ui.style.display=s===S.DOOR?'flex':'none';ov.style.display='none';hall.lobbyMode=s===S.DOOR;crowd.setActive(s===S.DOOR||s===S.ENTER);if(s!==S.DOOR&&canteen.isOpen)canteen.close();
- if(s===S.DOOR){setView('door');tip()}
- if(s===S.ENTER){tip('');await openDoor();setView('follow',{yaw:0,pitch:.55,dist:4});hall.lobby.hideTray();await me.walk([[LX[role],DOOR_Z+1.2],[LX[role],DOOR_Z-1]]);m.go(S.EXPLORE)}
+ if(s===S.DOOR){setView('door');tip();closeDoor()}
+ if(s===S.ENTER){tip('');setView('follow',{yaw:0,pitch:.55,dist:4});hall.lobby.hideTray();await me.walk([[LX[role],DOOR_Z+.6]]);openDoor();await me.walk([[LX[role],DOOR_Z-1.1]],.85);m.go(S.EXPLORE)}   // walk up, hands reach the door and push it, walk through
  if(s===S.EXPLORE){hall.setRoom(true);hint('WASD / arrows or tap the floor to walk · drag to look · tap a seat');if(p===S.SEATED)setView('follow',{pitch:.55,dist:4})}
  if(s===S.SEATED){setView('seat',{yaw:Math.PI*.15,pitch:.4,dist:3.2});hint(sync?.present?'You are seated. Start when you are both seated.':'You are seated. Start the movie when ready.')}
  if(s===S.WATCH){const first=p===S.SEATED;tip('');if(first){fade(.07,1800);await wait(500);tween(2600,u=>hall.setCurtains(u))}else fade(.07,900);if(!['orbit','full'].includes(view)||p!==S.WATCH)setView(watchView)}
@@ -88,7 +92,7 @@ function leaveStudio(){fadeEl.classList.add('on');setTimeout(()=>{studio.on=fals
 $('st-anim').onclick=()=>studio.wave();
 $('st-spin').onclick=e=>e.currentTarget.classList.toggle('on',studio.toggleSpin());
 document.querySelectorAll('#st-rail [data-v]').forEach(b=>b.onclick=()=>{studio.view(b.dataset.v);document.querySelectorAll('#st-rail [data-v]').forEach(x=>x.classList.toggle('on',x===b))});
-$('st-png').onclick=async()=>{const bl=await studio.png();if(!bl)return;const a=document.createElement('a');a.href=URL.createObjectURL(bl);a.download='our-twin-cinema.png';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)};
+$('st-png').onclick=async()=>{const bl=await studio.png();if(!bl)return;const a=document.createElement('a');a.href=URL.createObjectURL(bl);a.download='our-twin-cinemas.png';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)};
 /* ---- lobby movie frames: the couple's Twin Hearts library; details card when you stand in front of a frame ---- */
 // Twin Hearts hands over THIS phone's Movie -> Library in the link (&lib=). Without it (older app / Android) fall back to the server list.
 const libLoad=async()=>{if(APP&&APP.lib){hall.lobby.frames.set(APP.lib);return}const l=await fetchLibrary();hall.lobby.frames.set(l,APP?'err':'app')};libLoad();setInterval(()=>{if(!(APP&&APP.lib))libLoad()},90000);
@@ -103,7 +107,7 @@ function mvCard(mv){const id=mv?mv.id:null;if(id===mvId)return;mvId=id;mvc.class
  b.appendChild(el('p',0,mv.overview||'No review or description yet.'));mvc.appendChild(b)}
 /* actions */
 let blocked=false,atCounter=false;
-const startEnter=()=>{if(blocked||m.state!==S.DOOR)return;audio.door();audio.ambient(.05);m.go(S.ENTER)};
+const startEnter=()=>{if(blocked||m.state!==S.DOOR)return;audio.ambient(.05);m.go(S.ENTER)};
 const walkToCounter=()=>{target={x:role===1?-.9:.9,z:DOOR_Z+COUNTER_Z}};
 const stat=t=>$('dstat').textContent=t||'';
 let lost=null;
@@ -258,7 +262,7 @@ renderer.setAnimationLoop(()=>{const raw=clock.getDelta(),dt=Math.min(raw,.05),t
  movie.tick(dt);const now=performance.now();if(role===1&&sync?.present&&m.state===S.WATCH&&now-lastSync>3000){lastSync=now;sync.send({t:'sync',vt:movie.time,pl:movie.playing})}
  if(movie.dur&&now-lastUI>200){lastUI=now;const v=movie.time/movie.dur*1000,tc=fmt(movie.time),td=fmt(movie.dur);if(!UI.sk.matches(':active'))UI.sk.value=v;if(!UI.fsk.matches(':active'))UI.fsk.value=v;
   if(UI.tcT!==tc){UI.tcT=tc;UI.tc.textContent=UI.ftc.textContent=tc}if(UI.tdT!==td){UI.tdT=td;UI.td.textContent=td}pl.tick()}
- chatter.update(dt,t,m.is(S.WATCH));aud.forEach(a=>a.update(dt,t));if(me){me.update(dt,t);partner.update(dt,t);rig.ctx.me.copy(me.pos);rig.ctx.couple.copy(me.pos);if(partner.group.visible)rig.ctx.couple.add(partner.pos).multiplyScalar(.5);sync?.tick(performance.now(),me.av.walk,snap)}{const cx=rig.ctx,[sw,sh]=hall.dims();cx.sw=sw;cx.sh=sh;cx.sy=hall.screen.position.y;if(me){cx.chatT.copy(me.pos);if(partner.group.visible&&me.pos.distanceTo(partner.pos)<2.6)cx.chatT.add(partner.pos).multiplyScalar(.5);if(now-lastPlace>1000){lastPlace=now;placeChat()}}}
+ hall.doorTick(dt);doorLogic(dt);pushHands(me);pushHands(partner);chatter.update(dt,t,m.is(S.WATCH));aud.forEach(a=>a.update(dt,t));if(me){me.update(dt,t);partner.update(dt,t);rig.ctx.me.copy(me.pos);rig.ctx.couple.copy(me.pos);if(partner.group.visible)rig.ctx.couple.add(partner.pos).multiplyScalar(.5);sync?.tick(performance.now(),me.av.walk,snap)}{const cx=rig.ctx,[sw,sh]=hall.dims();cx.sw=sw;cx.sh=sh;cx.sy=hall.screen.position.y;if(me){cx.chatT.copy(me.pos);if(partner.group.visible&&me.pos.distanceTo(partner.pos)<2.6)cx.chatT.add(partner.pos).multiplyScalar(.5);if(now-lastPlace>1000){lastPlace=now;placeChat()}}}
  rig.ctx.seated=!!(me&&me.seated);rig.ctx.taken=hall.taken;rig.ctx.mine=mySeat?.id||null;rig.ctx.lobbyY=floorY(DOOR_Z);rig.ctx.lobby=m.state===S.DOOR;if(m.is(S.DOOR,S.ENTER)){hall.lobby.update(t);crowd.update(dt,t,camera,[me,partner&&partner.group.visible?partner:null])}
  {const fr=hall.lobby.frames,k=m.state===S.DOOR&&me&&!me.seated?fr.near(me.pos):-1;fr.hold=k>=0;mvCard(k>=0?fr.movie(k):null)}
  bubbleTick(now);if(!(movie.src&&m.is(S.WATCH,S.PAUSED,S.BREAK,S.END))&&now-lastScr>66){lastScr=now;hall.drawScreen(t,m.is(S.WATCH,S.PAUSED,S.BREAK),movie.dur?movie.time/movie.dur:0)}

@@ -20,7 +20,7 @@ function aim(b,c,d){b.updateWorldMatrix(true,true);c.getWorldPosition(_a1);b.get
 /** ring of reusable vectors for the per-frame pose directions (aim() consumes each one immediately) */
 const VT=(()=>{const p=Array.from({length:96},()=>new THREE.Vector3());let i=0;return(x,y,z)=>p[i++%96].set(x,y,z)})();
 /** opts: height (m), look (see look.js: per-part recolour), hide (mesh names), walker (can walk), seated (start seated, e.g. audience), headScale (number or [x,y,z]), relaxed (straight legs, straight arms: use for the couple), shadow (cast shadows, default true)
-    Lobby body language (walkers only): av.act = 'talk' | 'talk2' | 'phone' | 'carry' | 'hand' | 'scoop' | 'pour' | 'type' | 'wipe' | ''  ·  av.talk = 1 moves the mouth  ·  av.tly / av.tlp = look left-right / up-down (-1..1)  ·  av.wear(obj,'Head',[x,y,z]) fixes a prop to a bone (offset in metres) */
+    Lobby body language (walkers only): av.act = 'talk' | 'talk2' | 'phone' | 'carry' | 'hand' | 'scoop' | 'pour' | 'type' | 'wipe' | 'push' | ''  ·  av.talk = 1 moves the mouth  ·  av.tly / av.tlp = look left-right / up-down (-1..1)  ·  av.wear(obj,'Head',[x,y,z]) fixes a prop to a bone (offset in metres) */
 export function makeAvatar(gltf,{height=1.7,look,hide=[],walker=false,seated=false,headScale=1,relaxed=false,style='',shadow=true}={}){
  const m=clone(gltf.scene),group=new THREE.Group();group.add(m);const _q=new THREE.Quaternion(),_ad=new THREE.Vector3(),A=(b,c,d)=>aim(b,c,_ad.copy(d).applyQuaternion(group.getWorldQuaternion(_q)));   // pose directions are in the avatar's own frame, so limbs follow its facing
  const bn=n=>m.getObjectByName('mixamorig'+n)||m.getObjectByName(n),B={};NAMES.forEach(n=>B[n]=bn(n));const hips=bn('Hips');
@@ -66,7 +66,8 @@ export function makeAvatar(gltf,{height=1.7,look,hide=[],walker=false,seated=fal
   scoop:t=>{arm('Right',.5,-.45,.65,.25,-.3+.55*sn(t*4.5),.9);arm('Left',.15,-.55,.75,-.2,.0,1)},
   pour:t=>{arm('Left',.15,-.5,.8,-.2,.1,1);arm('Right',.15,-.45,.8,-.1,-.3+.25*sn(t*3),1)},
   type:t=>{arm('Left',.15,-.8,.5,-.2,-.5+.12*sn(t*9),.9);arm('Right',.15,-.8,.5,-.2,-.5+.12*sn(t*9+2),.9)},
-  wipe:t=>arm('Right',.2,-.55,.75,-.4+.9*sn(t*4),-.45,.8)};
+  wipe:t=>arm('Right',.2,-.55,.75,-.4+.9*sn(t*4),-.45,.8),
+  push:t=>{const s=.03*sn(t*3.1);arm('Left',.16,-.38,.85,-.06,.32+s,.95);arm('Right',.16,-.38,.85,-.06,.32-s,.95)}};
  let ly=0,lp=0,tk=0;
  const bodyLang=(dt,t)=>{const f=ACT[av.act];if(f)f(t);const a=Math.min(1,dt*6);ly+=(av.tly-ly)*a;lp+=(av.tlp-lp)*a;
   if(Math.abs(ly)>.004||Math.abs(lp)>.004){rotW(B.Neck,lp*.35,ly*.3,0);rotW(B.Head,lp*.55,ly*.55,0)}};

@@ -146,18 +146,48 @@ export function buildHall(scene,renderer){
 
  /* ---------- lobby (outside the door) ---------- */
  const y0=floorY(DOOR_Z),DW=.8,lobby=buildLobby(scene,{y0,DOOR_Z});
- const sc=mkCanvas(512,96),sx=sc.getContext('2d');sx.fillStyle='#fff3e6';sx.shadowColor='#ff6a4a';sx.shadowBlur=18;sx.font='bold 52px system-ui';sx.textAlign='center';sx.fillText('TWIN CINEMA',256,66);
+ const sc=mkCanvas(512,96),sx=sc.getContext('2d');sx.fillStyle='#fff3e6';sx.shadowColor='#ff6a4a';sx.shadowBlur=18;sx.font='bold 52px system-ui';sx.textAlign='center';sx.fillText('TWIN CINEMA’S',256,66);
  const lsign=new THREE.Mesh(new THREE.PlaneGeometry(3.2,.6),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(sc),transparent:true}));lsign.position.set(0,y0+3.3,DOOR_Z+.06);scene.add(lsign);
- // double door (two leaves that slide apart)
- const doorMat=M(0xb7a595,{roughness:.6}),door=new THREE.Group(),leaves=[-1,1].map(s=>{const l=new THREE.Group();l.add(new THREE.Mesh(new THREE.BoxGeometry(DW,2.4,.07),doorMat));const pn=new THREE.Mesh(new THREE.BoxGeometry(DW-.2,1.9,.02),M(0xcdbcab,{roughness:.6}));pn.position.z=-.04;l.add(pn);
-  const bar=new THREE.Mesh(new THREE.BoxGeometry(.04,.04,.5),metal);bar.rotation.y=Math.PI/2;bar.position.set(-s*.2,0,-.07);bar.scale.set(1,1,1);l.add(bar);l.position.x=s*DW/2;l.children.forEach(k=>k.castShadow=true);door.add(l);return l});
+ /* double PUSH door (the doorway between the lobby and the hall). Two hinged leaves: walnut, raised panels, a glass vision panel, steel PUSH plates + kick plates on BOTH faces, three hinges each.
+    A push swings them open (they spring up to the door stop with a small bounce); a door closer then swings them shut slowly and they latch with a soft knock. See doorTo / doorTick below. */
+ const LW_=DW-.02,OPEN=1.75,door=new THREE.Group();
+ const wood=M(0x4b2a1d,{roughness:.55,metalness:.05}),woodHi=M(0x60381f,{roughness:.5}),steel=M(0xc4c8cd,{roughness:.3,metalness:.55}),
+  glass=new THREE.MeshStandardMaterial({color:0xa9cfe6,roughness:.08,metalness:.1,transparent:true,opacity:.3,depthWrite:false});
+ const plateMat=(()=>{const c=mkCanvas(128,384),g=c.getContext('2d'),gr=g.createLinearGradient(0,0,128,0);gr.addColorStop(0,'#aeb2b8');gr.addColorStop(.5,'#e6e8ec');gr.addColorStop(1,'#a3a7ad');g.fillStyle=gr;g.fillRect(0,0,128,384);
+  g.fillStyle='#30343b';g.font='bold 33px system-ui';g.textAlign='center';g.fillText('PUSH',64,74);g.fillRect(30,98,68,3);g.fillRect(30,300,68,3);
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return new THREE.MeshStandardMaterial({map:t,roughness:.35,metalness:.3})})();
+ const mkLeaf=side=>{                                                                   // side -1 = left leaf (hinge at the left jamb), +1 = right leaf
+  const piv=new THREE.Group(),slab=new THREE.Group();piv.position.set(side*(DW-.014),0,0);slab.position.x=-side*LW_/2;piv.add(slab);
+  const part=(w,h,d,m,x,y,z,to=slab)=>{const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y,z);o.castShadow=m!==glass;to.add(o);return o},T=.06;
+  part(LW_,1.39,T,wood,0,-.495,0);part(LW_,.19,T,wood,0,1.095,0);                       // lower body + top rail
+  for(const e of[-1,1])part(.12,.8,T,wood,e*(LW_/2-.06),.6,0);                          // stiles beside the glass
+  part(LW_-.24,.8,.012,glass,0,.6,0);
+  for(const f of[1,-1]){const z=f*(T/2+.004);                                           // f = +1 lobby face, -1 hall face (both get the same fittings)
+   part(LW_-.2,.42,.008,woodHi,0,-.72,z);                                               // raised lower panel
+   part(LW_-.24,.026,.012,steel,0,1.0,z);part(LW_-.24,.026,.012,steel,0,.2,z);          // window trim
+   for(const e of[-1,1])part(.026,.8,.012,steel,e*(LW_/2-.12),.6,z);
+   part(LW_-.02,.22,.008,steel,0,-1.08,z);                                              // kick plate
+   part(.15,.5,.012,plateMat,-side*(LW_/2-.13),-.2,z*1.18)}                             // PUSH plate near the free edge, at hand height
+  for(const y of[-.9,.1,.95]){const h=new THREE.Mesh(new THREE.CylinderGeometry(.02,.02,.12,10),steel);h.position.set(0,y,0);piv.add(h)}   // hinges
+  door.add(piv);return piv};
+ const leaves=[mkLeaf(-1),mkLeaf(1)];
  door.position.set(0,y0+1.2,DOOR_Z-.06);scene.add(door);
+ for(const e of[-1,1])box(.05,2.46,.1,dark,e*(DW+.045),y0+1.23,DOOR_Z-.1);box(DW*2+.14,.1,.1,dark,0,y0+2.45,DOOR_Z-.1);   // trim round the doorway on the hall side
+ let dA=0,dV=0,dMode='shut',dDir=1,dLast=-1;                                           // angle (0 closed .. OPEN), speed, what it is doing, which way it swings (+1 into the hall, -1 into the lobby)
+ const setLeaves=a=>{leaves[0].rotation.y=a*dDir;leaves[1].rotation.y=-a*dDir};
  box(.7,.22,.06,new THREE.MeshBasicMaterial({color:0x3dff7a}),0,y0+2.95,DOOR_Z+.1);
  sign(0,y0+2.75,DOOR_Z-.03,Math.PI);
 
  const push=(p,r,b)=>{const cx2=cl(p.x,b.x0,b.x1),cz=cl(p.z,b.z0,b.z1),dx=p.x-cx2,dz=p.z-cz,d=Math.hypot(dx,dz);if(d<r){if(d>1e-4){p.x=cx2+dx/d*r;p.z=cz+dz/d*r}else p.z=b.z0-r}};
  const api={lobby,lobbyMode:false,discs:[],dims:()=>dims,seats,taken,door,screen,cL,cR,picks,floors:[flat,...treads],setScreen,fitScreen:a=>setScreen(kind,a),setScreenMap(t){screenMat.map=t||stex;screenMat.needsUpdate=true},sizes:Object.keys(SIZES),
-  setDoor(u){leaves[0].position.x=-DW/2-u*DW*.95;leaves[1].position.x=DW/2+u*DW*.95},
+  /** push the door open (dir +1 swings into the hall, -1 into the lobby) or let the closer shut it. doorTick(dt) must run every frame. */
+  doorTo(open,dir=1){if(open){if(dMode!=='open'){if(dA<.02)dDir=dir>=0?1:-1;dMode='open';dV=Math.max(dV,2.6)}}else{dMode='shut';dV=0}},
+  doorTick(dt){dt=Math.min(dt,.05);
+   if(dMode==='open'){dV+=((OPEN-dA)*24-dV*7)*dt;dA+=dV*dt;if(dA>OPEN){dA=OPEN;dV=-Math.abs(dV)*.3}}                       // pushed: fast start, eases onto the door stop, tiny bounce
+   else if(dA>0){dA-=Math.max(.3,Math.min(1.3,dA*1.8))*dt;dV=0;if(dA<=0){dA=0;api.onDoorShut?.()}}                          // door closer: steady, slows down for the last bit, then latches
+   if(dA!==dLast){dLast=dA;setLeaves(dA)}},
+  doorAngle:()=>dA,doorOpenAngle:OPEN,onDoorShut:null,
+  setDoor(u){dMode=u>0?'open':'shut';dA=u*OPEN;dV=0;setLeaves(dA)},
   /** house=1 full lights, 0.07 movie dark */
   setLights(v){lobby.setLights(v);hemi.intensity=.06+.64*v;spot.intensity=60*v;lamps.forEach(l=>l.intensity=.7*v);bayLights.forEach(l=>l.intensity=9*v);warm.emissiveIntensity=.12+.88*v;washMats.forEach(m=>m.opacity=.1+.8*v);
    stepMat.emissiveIntensity=.5+.8*v;dlMat.color.setScalar(.2+.8*v);scene.environmentIntensity=.05+.3*v;glow.intensity=6*(1-v)},
@@ -168,7 +198,7 @@ export function buildHall(scene,renderer){
   drawScreen(t,playing,prog=0){const g=cx.createRadialGradient(SW/2,SH/2,30,SW/2,SH/2,SW*.62);
    if(playing){g.addColorStop(0,'#4a2226');g.addColorStop(1,'#120708')}else{g.addColorStop(0,'#fff3ea');g.addColorStop(1,'#f1cdbb')}
    cx.fillStyle=g;cx.fillRect(0,0,SW,SH);cx.textAlign='center';
-   cx.shadowColor=playing?'#ff6a4a':'transparent';cx.shadowBlur=playing?30:0;cx.fillStyle=playing?'#fff':'#8a3a32';cx.font='bold 84px system-ui';cx.fillText('TWIN CINEMA',SW/2,270);
+   cx.shadowColor=playing?'#ff6a4a':'transparent';cx.shadowBlur=playing?30:0;cx.fillStyle=playing?'#fff':'#8a3a32';cx.font='bold 84px system-ui';cx.fillText('TWIN CINEMA’S',SW/2,270);
    cx.shadowBlur=0;cx.font='30px system-ui';cx.fillStyle=playing?'#e8c9c0':'#a8625a';cx.fillText(playing?'▶ Demo movie · choose a video file for the real thing':'Choose your seats ♥',SW/2,336);
    if(playing||prog>0){cx.fillStyle=playing?'#fff3':'#8a3a3233';cx.fillRect(140,500,1000,6);cx.fillStyle='#ff6a4a';cx.fillRect(140,500,1000*prog,6)}
    cx.fillStyle='#e0504a';cx.font='40px serif';cx.fillText('♥',SW/2+Math.sin(t*2)*70,420+Math.cos(t*3)*8);stex.needsUpdate=true},

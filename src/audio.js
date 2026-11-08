@@ -96,6 +96,9 @@ export const audio={
  volume(k,v){if(!(k in vol))return;vol[k]=Math.max(0,Math.min(1,+v||0));try{localStorage.setItem('cin_vol',JSON.stringify(vol))}catch{}applyVol()},volumes:()=>({...vol}),isMuted:()=>muted,
  meme:memePlay,memeStop,memePrefetch,state:()=>ctx?ctx.state:'none',
  door(){tone(110,.9,'sawtooth',.08,0,55);burst(.5,.12,400,.1)},
+ /** push door: the shove + a short hinge creak, and the soft knock when the closer latches it */
+ doorPush(){burst(.09,.22,350);tone(92,.55,'sawtooth',.035,.02,58);tone(138,.4,'sawtooth',.02,.05,90);burst(.14,.07,1800,.12)},
+ doorShut(){tone(75,.16,'sine',.3,0,42);burst(.05,.25,700);burst(.03,.18,3200,.06)},
  chat(){tone(880,.12,'sine',.12);tone(1320,.14,'sine',.08,.07)},
  crunch(){for(let i=0;i<4;i++)burst(.07,.25,2500+Math.random()*2000,i*.11)},
  chime(){tone(523,1.2,'sine',.15);tone(659,1.2,'sine',.12,.18);tone(784,1.6,'sine',.12,.36)},
