@@ -1,5 +1,5 @@
 // Tiny synthesized sound kit (no audio files): room tone, door, chat blip, crunch, chime. Call audio.init() from a user gesture.
-let ctx,master,amb,musicGain,bgmEl,bgmOn=false,bgmVol=0,padNodes=null,bgmTarget=0,stepFlip=0;
+let ctx,master,amb,musicGain,crowdGain,songEl=null,songsOn=false,crowdOn=false,stepFlip=0,mixT={songs:0,crowd:0},mixS=2,bgmScale=1,list=[],order=[],oi=0;
 const env=(g,t,a,d)=>{g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(a,t+.01);g.gain.exponentialRampToValueAtTime(.0001,t+d)};
 function tone(f,d,type='sine',a=.2,t0=0,to){if(!ctx)return;const t=ctx.currentTime+t0,o=ctx.createOscillator(),g=ctx.createGain();o.type=type;o.frequency.setValueAtTime(f,t);if(to)o.frequency.exponentialRampToValueAtTime(to,t+d);env(g,t,a,d);o.connect(g).connect(master);o.start(t);o.stop(t+d+.05)}
 function burst(d,a=.3,f=3000,t0=0){if(!ctx)return;const t=ctx.currentTime+t0,n=ctx.createBufferSource(),b=ctx.createBuffer(1,ctx.sampleRate*d,ctx.sampleRate),x=b.getChannelData(0);for(let i=0;i<x.length;i++)x[i]=Math.random()*2-1;n.buffer=b;
@@ -15,28 +15,34 @@ function step(surface='carpet',vol=1){if(!ctx||vol<=.01)return;const t=ctx.curre
  const n=ctx.createBufferSource(),b=ctx.createBuffer(1,ctx.sampleRate*.12,ctx.sampleRate),x=b.getChannelData(0);for(let i=0;i<x.length;i++)x[i]=Math.random()*2-1;n.buffer=b;
  const f=ctx.createBiquadFilter();f.type=fl?'bandpass':'lowpass';f.frequency.value=(fl?2200:700)*j;f.Q.value=fl?1.2:.5;
  const ng=ctx.createGain();ng.gain.setValueAtTime(0,t);ng.gain.linearRampToValueAtTime(fl?.55:.35,t+.004);ng.gain.exponentialRampToValueAtTime(.0001,t+(fl?.05:.1));n.connect(f).connect(ng).connect(g);n.start(t)}
-/* ---- background music: a looping file (public/audio/theatre-bgm.mp3). If the file is missing, a soft synthesized pad plays instead. ---- */
-function pad(){if(padNodes)return;const lp=ctx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=900;const out=ctx.createGain();out.gain.value=.5;lp.connect(out).connect(musicGain);
- const chords=[[130.8,164.8,196,246.9],[110,138.6,164.8,207.7],[87.3,130.8,174.6,220],[98,123.5,146.8,196]],oscs=[];
- chords[0].forEach((fq,i)=>{const o=ctx.createOscillator(),g=ctx.createGain();o.type=i%2?'triangle':'sine';o.frequency.value=fq;g.gain.value=.18;o.connect(g).connect(lp);o.start();oscs.push(o);
-  const l=ctx.createOscillator(),lg=ctx.createGain();l.frequency.value=.07+i*.03;lg.gain.value=.08;l.connect(lg).connect(g.gain);l.start()});
- let c=0;const iv=setInterval(()=>{if(!ctx)return;c=(c+1)%chords.length;oscs.forEach((o,i)=>o.frequency.setTargetAtTime(chords[c][i],ctx.currentTime,2.5))},9000);padNodes={oscs,iv}}
-function startMusic(url){if(!ctx||bgmOn)return;bgmOn=true;
- if(!url){pad();return}
- bgmEl=new Audio(url);bgmEl.loop=true;bgmEl.preload='auto';bgmEl.crossOrigin='anonymous';
- try{ctx.createMediaElementSource(bgmEl).connect(musicGain)}catch(e){bgmEl.volume=.5}
- bgmEl.addEventListener('error',()=>{bgmEl=null;pad()},{once:true});
- bgmEl.play().catch(()=>{})}
+/* playlist: shuffled on every page load (never starts with the song that played last time), then plays on to the next song by itself, reshuffling after the last one */
+function shuffle(n){const a=[...Array(n).keys()];for(let i=n-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a}
+function startSongs(urls){if(!ctx||songsOn||!urls?.length)return;songsOn=true;list=urls;order=shuffle(list.length);
+ let last=-1;try{last=+localStorage.getItem('cin_last')}catch{}
+ if(order.length>1&&order[0]===last){const k=1+(Math.random()*(order.length-1)|0);[order[0],order[k]]=[order[k],order[0]]}   // refresh / re-entry -> a different first song
+ oi=0;const el=songEl=new Audio();el.preload='auto';el.crossOrigin='anonymous';
+ try{ctx.createMediaElementSource(el).connect(musicGain)}catch(e){}
+ const play=()=>{const i=order[oi];try{localStorage.setItem('cin_last',i)}catch{}el.src=list[i];el.play().catch(()=>{})};
+ el.addEventListener('ended',()=>{oi++;if(oi>=order.length){const lastI=order[order.length-1];order=shuffle(list.length);if(order.length>1&&order[0]===lastI)order.push(order.shift());oi=0}play()});
+ el.addEventListener('error',()=>{if(++errs>list.length){songsOn=false;return}oi=(oi+1)%order.length;play()});let errs=0;
+ play()}
+/* hall crowd: one seamless loop (decoded to memory so it repeats with no gap) */
+async function startCrowd(url){if(!ctx||crowdOn||!url)return;crowdOn=true;try{const buf=await ctx.decodeAudioData(await(await fetch(url)).arrayBuffer()),n=ctx.createBufferSource();n.buffer=buf;n.loop=true;n.connect(crowdGain);n.start()}catch(e){crowdOn=false;console.warn('crowd audio',e)}}
+function applyMix(){if(!ctx)return;const t=ctx.currentTime,k=Math.max(.05,mixS/3);musicGain.gain.setTargetAtTime(mixT.songs*bgmScale,t,k);crowdGain.gain.setTargetAtTime(mixT.crowd*bgmScale,t,k)}
 export const audio={
- init(){if(ctx){ctx.resume();return}ctx=new(window.AudioContext||window.webkitAudioContext)();master=ctx.createGain();master.gain.value=.6;master.connect(ctx.destination);musicGain=ctx.createGain();musicGain.gain.value=0;musicGain.connect(master);
+ init(){if(ctx){ctx.resume();return}ctx=new(window.AudioContext||window.webkitAudioContext)();master=ctx.createGain();master.gain.value=.6;master.connect(ctx.destination);musicGain=ctx.createGain();musicGain.gain.value=0;musicGain.connect(master);crowdGain=ctx.createGain();crowdGain.gain.value=0;crowdGain.connect(master);applyMix();
   const b=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
   const n=ctx.createBufferSource();n.buffer=b;n.loop=true;const f=ctx.createBiquadFilter();f.type='lowpass';f.frequency.value=180;amb=ctx.createGain();amb.gain.value=0;n.connect(f).connect(amb).connect(master);n.start()},
  step,
- /** start the music (call after audio.init, from a user gesture). url = optional file; omit for the built-in pad */
- music(url){startMusic(url);bgmEl?.play().catch(()=>{})},
- /** music loudness 0..1 (keep it low, ~0.1), eased over `s` seconds */
- musicVol(v,s=1.5){bgmTarget=v;musicGain&&musicGain.gain.setTargetAtTime(v,ctx.currentTime,s/3)},
- musicToggle(){const on=musicGain&&musicGain.gain.value>.001;this.musicVol(on?0:(this._mv||.1),.6);return !on},
+ /** songs: array of urls (the lobby playlist). Call after audio.init(), from a tap. Safe to call again. */
+ music(urls){startSongs(urls);songEl?.paused&&songEl.src&&songEl.play().catch(()=>{})},
+ /** the hall crowd loop (one url) */
+ crowd(url){startCrowd(url)},
+ /** loudness of each layer, 0..1: audio.mix({songs:.5,crowd:0},2) eased over 2 s */
+ mix(m,secs=1.5){mixT={...mixT,...m};mixS=secs;applyMix()},
+ /** music + crowd on/off (the master 🔔 button mutes everything including these) */
+ musicToggle(){bgmScale=bgmScale?0:1;applyMix();return !!bgmScale},
+ next(){songEl&&songEl.dispatchEvent(new Event('ended'))},
  ambient(v){amb&&amb.gain.setTargetAtTime(v,ctx.currentTime,.8)},
  mute(m){if(master)master.gain.value=m?0:.6},
  door(){tone(110,.9,'sawtooth',.08,0,55);burst(.5,.12,400,.1)},
