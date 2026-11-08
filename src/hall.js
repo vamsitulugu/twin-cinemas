@@ -167,7 +167,8 @@ export function buildHall(scene,renderer){
    part(LW_-.24,.026,.012,steel,0,1.0,z);part(LW_-.24,.026,.012,steel,0,.2,z);          // window trim
    for(const e of[-1,1])part(.026,.8,.012,steel,e*(LW_/2-.12),.6,z);
    part(LW_-.02,.22,.008,steel,0,-1.08,z);                                              // kick plate
-   part(.15,.5,.012,plateMat,-side*(LW_/2-.13),-.2,z*1.18)}                             // PUSH plate near the free edge, at hand height
+   part(.15,.5,.012,plateMat,-side*(LW_/2-.13),-.2,z*1.18)}
+  for(const e of[-1,1])part(.03,.05,.05,steel,e*(LW_/2-.1),-.12,-(T/2+.03));part(LW_-.14,.06,.04,steel,0,-.12,-(T/2+.052));   // hall face: a proper push bar across the leaf (the way out)                             // PUSH plate near the free edge, at hand height
   for(const y of[-.9,.1,.95]){const h=new THREE.Mesh(new THREE.CylinderGeometry(.02,.02,.12,10),steel);h.position.set(0,y,0);piv.add(h)}   // hinges
   door.add(piv);return piv};
  const leaves=[mkLeaf(-1),mkLeaf(1)];
@@ -186,7 +187,7 @@ export function buildHall(scene,renderer){
    if(dMode==='open'){dV+=((dOpen-dA)*24-dV*7)*dt;dA+=dV*dt;if(dA>dOpen){dA=dOpen;dV=-Math.abs(dV)*.3}}                       // pushed: fast start, eases onto the door stop, tiny bounce
    else if(dA>0){dA-=Math.max(.3,Math.min(1.3,dA*1.8))*dt;dV=0;if(dA<=0){dA=0;api.onDoorShut?.()}}                          // door closer: steady, slows down for the last bit, then latches
    if(dA!==dLast){dLast=dA;setLeaves(dA)}},
-  doorAngle:()=>dA,doorOpenAngle:()=>dOpen,onDoorShut:null,
+  doorAngle:()=>dA,doorDir:()=>dDir,doorOpenAngle:()=>dOpen,onDoorShut:null,
   setDoor(u){dMode=u>0?'open':'shut';dA=u*dOpen;dV=0;setLeaves(dA)},
   /** house=1 full lights, 0.07 movie dark */
   setLights(v){lobby.setLights(v);hemi.intensity=.06+.64*v;spot.intensity=60*v;lamps.forEach(l=>l.intensity=.7*v);bayLights.forEach(l=>l.intensity=9*v);warm.emissiveIntensity=.12+.88*v;washMats.forEach(m=>m.opacity=.1+.8*v);

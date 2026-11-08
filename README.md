@@ -1,45 +1,5 @@
-# Twin Cinema
-A 3D cinema for two people in different places: meet at the door, walk in, pick seats, share popcorn, chat above your heads, and watch together with synced playback.
-
-## Run
-    npm install
-    npm run dev        # also reachable from your phone via the printed network URL
-    npm run build      # deploy the dist folder (Vercel: framework preset Vite)
-
-## Two people, two places
-1. Create a Supabase project. Settings > API: copy the URL and anon key. Realtime broadcast needs no tables.
-2. Copy `.env.example` to `.env` and fill both values. On Vercel add the same two variables (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY).
-3. Share a room link like https://your-site/#our-room. One of you picks Person 1, the other Person 2.
-Without the .env values it runs in local test mode (two tabs of the same browser).
-
-## The movie
-Each of you picks the SAME video file with "Choose movie". Only controls sync (start, pause, break, seek, drift correction), not the video itself. No file = a 30 s demo.
-
-## Controls
-WASD / arrows / tap floor / on-screen joystick (phones) to walk; drag to look; tap a seat then Sit here. Menu: Start, Pause, Break, Screen, Full screen, 360, Sound, Popcorn, emotes, chat, Leave.
-
-## Player controls (while the movie plays, is paused or on a break)
-src/controls.js draws the cinema player: back (screen / your seat), title + who paused, sound, full screen, back 10 s / play-pause / forward 10 s, 😊 reactions, a red seek bar, and a bottom row: Sync, Message (chat), Log (activity + chat), Voice, Video, End, More (camera, view picker, break, popcorn, alerts, leave, choose movie file). It fades out after 3.5 s while playing; tap or move to bring it back. Keys: Space/K play-pause, ←/J and →/L = 10 s, M sound, F full screen, V views. Voice and Video are buttons only for now (c.hooks.voice / c.hooks.video in main.js).
-
-## Structure
-src/state.js   story state machine (door > enter > explore > seated > watch <> paused/break > end)
-src/hall.js    hall, seats, screen, curtains, lobby, lighting, collision
-src/camera.js  camera shots: door, follow, seat, orbit 360, screen, couple, full
-src/avatar.js  rigged GLB avatars, procedural walk/sit/wave, seated audience
-src/player.js  a person in the hall (me or partner): move, sit, stand, popcorn
-src/net.js     Supabase Realtime room, presence heartbeat (BroadcastChannel fallback)
-src/video.js   movie source (file or demo), play/pause/seek, drift correction
-src/audio.js   synthesized sounds (room tone, door, chat, crunch, chime)
-src/studio.js  outside-the-theatre navy studio screen (couple avatars, Animate / PNG / camera rail)
-src/look.js    per-part recolouring so each audience member differs (skin, hair, top, trousers, shoes)
-public/models  couple_f.glb (Person 1) + couple_m.glb (Person 2) = your MetaPerson avatars (only used for the two of you); aud_a/aud_b/aud_c + avatar_m = four different audience people (sample avatars from the open-source TalkingHead repo)
-public/models/audience  drop more MetaPerson .glb files here + list them in index.json for extra faces
-
-## Lobby crowd (src/crowd.js)
-The lobby / canteen is now busy: 2 canteen sellers in uniform and caps (scoop popcorn, work the till, greet you, hand over your order), people queueing at both counters, friends chatting in circles (talking mouths, hand gestures, speech bubbles) who go to buy snacks and come back, visitors browsing posters / menu, taking selfies, checking the time at the hall door, and public-address announcements with a chime. Everyone has their own face, skin, hair and clothes (src/look.js `crowdLook`). The crowd only exists and updates while the couple is in the lobby; the couple cannot walk through people (`hall.discs`). New avatar controls for this are documented at `makeAvatar` in src/avatar.js (`av.act`, `av.talk`, `av.tly/tlp`, `av.wear`). New sounds in src/audio.js: `pop`, `ching`, `murmur`.
-
-## Real footstep sounds
-Put your recording in `public/audio/footsteps.mp3` (.wav / .ogg / .m4a also work). It can be one step or a short clip of several steps: it is cut into single footfalls and one is played at the exact moment each foot lands (you, your partner, lobby = hall). Missing file = the old synthesized steps. Check the browser console for `[footsteps] ... N step(s)`.
-
-## Audience chat (hall)
-`seatedChatter` in src/avatar.js: seated people pair up with a neighbour and chat (lip-sync mouth shapes, hand gestures, head turns and nods, smiles). Quiet while the movie plays; tune `QUIET_DURING_MOVIE`, `MAX_TALKERS`, `CHAT_RANGE`.
+# Door fix (twin-cinemas) — copy over the repo, same paths
+- src/hall.js : push bar on the hall face of the door, doorDir() helper
+- src/main.js : simple enter walk, exit starts when you walk up to the door, same door pushes open into the lobby
+(main.js also contains the earlier sync changes you already applied, so it is safe to overwrite.)
+Then run:  npm run build   (refreshes dist/)

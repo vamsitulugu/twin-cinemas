@@ -85,7 +85,10 @@ function buttons(){bar.innerHTML='';const s=m.state;
  if(view==='full'){bar.innerHTML='';B('✕','Exit full screen',exitFull)}}
 m.on(async(s,p)=>{const ui=$('door-ui'),ov=$('ov');ui.style.display=s===S.DOOR?'flex':'none';ov.style.display='none';hall.lobbyMode=s===S.DOOR;crowd.setActive(s===S.DOOR||s===S.ENTER);if(s!==S.DOOR&&canteen.isOpen)canteen.close();
  if(s===S.DOOR){hall.setRoom(false);if(p===S.EXPLORE)setView('follow',{yaw:Math.PI,pitch:.5,dist:4.5});else setView('door');tip();closeDoor();if(p===S.EXPLORE)hint(LOBBY_TIP)}   // back from the hall: the camera follows you round the lobby again (the fixed door shot is only for the very start)
- if(s===S.ENTER){tip('');setView('follow',{yaw:0,pitch:.55,dist:4});hall.lobby.hideTray();await me.walk([[LX[role],DOOR_Z+.6]]);openDoor();await me.walk([[LX[role],DOOR_Z-1.1]],.85);m.go(S.EXPLORE)}   // walk up, hands reach the door and push it, walk through
+ if(s===S.ENTER){tip('');hall.lobby.hideTray();const x=LX[role],far=me.pos.z>DOOR_Z+3.4;      // simple entrance: one steady walk to the door, it opens as you arrive, you walk straight through
+  if(far)setView('follow',{yaw:0,pitch:.55,dist:4});else setView('door');                      // steady shot of the door (no camera swing); a long way off: the camera simply follows behind
+  if(me.pos.z>DOOR_Z+1.6)await me.walk([[x,DOOR_Z+1.5]],1.9);openDoor(1);await me.walk([[x,DOOR_Z-1.5]],1.5);
+  setView('follow',{yaw:0,pitch:.55,dist:4});m.go(S.EXPLORE)}   // walk up, hands reach the door and push it, walk through
  if(s===S.EXPLORE){hall.setRoom(true);hint('WASD / arrows or tap the floor to walk · drag to look · tap a seat');if(p===S.SEATED)setView('follow',{pitch:.55,dist:4})}
  if(s===S.SEATED){setView('seat',{yaw:Math.PI*.15,pitch:.4,dist:3.2});hint(sync?.present?'You are seated. Start when you are both seated.':'You are seated. Start the movie when ready.')}
  if(s===S.WATCH){const first=p===S.SEATED;tip('');if(first){fade(.07,1800);await wait(500);tween(2600,u=>hall.setCurtains(u))}else fade(.07,900);if(!['orbit','full'].includes(view)||p!==S.WATCH)setView(watchView)}
@@ -133,11 +136,11 @@ async function join(r){if(role)return;role=r;if(APP)inStudio=true;else leaveStud
  setView('follow',{yaw:Math.PI,pitch:.5,dist:4.5});canteen.showBag(true);hint(LOBBY_TIP);
  sync=await createSync(code,r,{
   onJoin(){partner.group.visible=true;pHere=true;stat('Your partner is in the lobby ♥');hint(m.state===S.DOOR?LOBBY_TIP:'');buttons();studioRefresh()},
-  onHello(){sync?.send({t:'pos',...snap()});if(lobbyGo)sync?.send({t:'lobby'});if(APP&&inv?.isStarted())sync?.send({t:'go'});if(movie.meta)sync?.send({t:'meta',meta:movie.meta})},onMsg,
+  onHello(){ping();sync?.send({t:'pos',...snap()});if(lobbyGo)sync?.send({t:'lobby'});if(APP&&inv?.isStarted())sync?.send({t:'go'});if(movie.meta)sync?.send({t:'meta',meta:movie.meta})},onMsg,
   onPos(q){if(!partner.tgt)partner.net(q,true);else partner.net(q);partner.group.visible=true;{const dz=q.z-DOOR_Z;if(Math.abs(dz)<.8)openDoor(dz>0?1:-1)}
    if(q.s&&!partnerSeat)partnerSit(q.s);else if(!q.s&&partnerSeat&&!partner.script)partnerStand();if(!!q.pc!==!!partner.popcorn)partner.setPop(!!q.pc);if(!!q.dr!==!!partner.drink)partner.setDrink(!!q.dr)},
   onSit:q=>partnerSit(q.id),onStand:()=>partnerStand(),
-  onLeave(){share.partner=false;pHere=false;studioRefresh();stat('Your partner left');tip('Your partner left the theatre');partner.group.visible=false;if(partnerSeat){hall.taken.delete(partnerSeat.id);hall.setSeatHighlight(partnerSeat.id,0);partnerSeat=null}partner.busy=false;buttons()},
+  onLeave(){partnerGone();share.partner=false;pHere=false;studioRefresh();stat('Your partner left');tip('Your partner left the theatre');partner.group.visible=false;if(partnerSeat){hall.taken.delete(partnerSeat.id);hall.setSeatHighlight(partnerSeat.id,0);partnerSeat=null}partner.busy=false;buttons()},
   onConflict(){stat('That seat in the room is already taken — reload and pick the other person');blocked=true;sync?.close()}});
  stat('Waiting for your partner at the door…');studioRefresh()}
 document.querySelectorAll('#roles button').forEach(b=>b.onclick=()=>join(+b.dataset.r));$('room').value=decodeURIComponent(location.hash.slice(1));
@@ -148,16 +151,43 @@ async function sitDown(){const seat=hall.seats.get(pending);if(!seat)return;cons
 let leaving=false;
 /** walk out of the hall: push the door open toward the lobby, step through, and you are back in the lobby (the door closer shuts it behind you) */
 async function exitHall(){if(leaving||!me||m.state!==S.EXPLORE||me.script||me.seated)return;leaving=true;target=null;pending=null;
- const x=Math.max(-.2,Math.min(.2,me.pos.x));
- setView('follow',{yaw:Math.PI,pitch:.42,dist:3.4});await me.walk([[x,DOOR_Z-.58]],1.2);hall.setRoom(false);openDoor(-1);await me.walk([[x,DOOR_Z+1.7]],.85);
+ const x=Math.max(-.35,Math.min(.35,me.pos.x));
+ setView('follow',{yaw:Math.PI,pitch:.42,dist:3.4});
+ if(doorOpen&&hall.doorDir()>0){closeDoor();for(let i=0;i<60&&hall.doorAngle()>.02;i++)await wait(50)}          // the door is still swung into the hall (your partner came in): let it shut, then push it the right way
+ if(me.pos.z<DOOR_Z-.8)await me.walk([[x,DOOR_Z-.8]],1.3);                                                                   // step up to the door, face it
+ hall.setRoom(false);openDoor(-1);await wait(350);                                                        // push: the leaves swing out into the lobby
+ await me.walk([[x,DOOR_Z+1.7]],1.3);                                                                     // straight through
  m.go(S.DOOR);leaving=false}
 async function standUp(){sync?.send({t:'stand'});hall.setSeatHighlight(mySeat.id,0);await me.stand(mySeat);mySeat=null;m.go(S.EXPLORE)}
 /* ---- movie: sync, full screen, seek ---- */
-let applying=false,partnerMeta=null,lastSync=0,fullOn=false;const fv=$('fv'),fc=$('fc');
+let applying=false,partnerMeta=null,lastSync=0,fullOn=false,cloudLoaded=false;
+let lat=0,bufMe=false,bufPartner=false,bufAt=0,stallSince=0;const rtts=[];     // lat = one-way delay to your partner in seconds (from ping/pong); buf* = who is waiting for video dataconst fv=$('fv'),fc=$('fc');
 const same=(a,b)=>a&&b&&(APP||a.size===b.size)&&Math.abs(a.dur-b.dur)<(APP?4:2);      // from Twin Hearts the match is by length (same as the Watch Together page)
 const checkMeta=()=>{if(movie.meta&&partnerMeta)tip(same(movie.meta,partnerMeta)?'Both of you have the same movie ♥':'Heads up: your partner picked a different file, so you will not see the same movie');else if(movie.meta&&sync?.present)tip('Waiting for your partner to choose the same movie file')};
-function onMsg(q){if(q.t==='ad')return ads.remote();if(q.t==='adend')return ads.partnerEnd();if(ads.active&&(q.t==='ctl'||q.t==='seek'||q.t==='sync'))return;if(q.t==='ctl'){if(Math.abs(movie.time-q.vt)>.5)movie.seek(q.vt);applying=true;m.go(q.s);applying=false}
- else if(q.t==='seek')movie.seek(q.vt);else if(q.t==='sync'){if(role===2&&m.state===S.WATCH&&q.pl)movie.correct(q.vt)}
+/* ---- latency estimate + "partner is loading" (stall) handling ----
+   ping/pong every 4 s -> median round trip / 2 = lat; every time / seek the partner sends is moved forward by lat while the movie plays.
+   If your video waits for data for 1.5 s while watching, your partner pauses ("loading") and both resume together when you are ready. */
+const bufEl=document.createElement('div');bufEl.style.cssText='position:fixed;left:50%;top:max(70px,env(safe-area-inset-top));transform:translateX(-50%);z-index:70;padding:9px 18px;border-radius:999px;font:600 14px system-ui,sans-serif;color:#fff;background:rgba(43,6,29,.9);border:1px solid rgba(194,26,139,.45);pointer-events:none;display:none;white-space:nowrap';document.body.appendChild(bufEl);
+function bufUI(){const t=bufPartner?'⏳ Your partner is loading…':bufMe?'⏳ Loading — your partner will wait for you':'';bufEl.textContent=t;bufEl.style.display=t?'block':'none'}
+function gotPong(q){const r=performance.now()-q.c;if(!(r>=0&&r<5000))return;rtts.push(r);if(rtts.length>7)rtts.shift();const s=[...rtts].sort((a,b)=>a-b);lat=Math.min(1.5,s[s.length>>1]/2000)}
+function ping(){if(sync?.present)sync.send({t:'ping',c:performance.now()})}
+function onBuf(q){if(m.state!==S.WATCH)return;
+ if(q.on){bufPartner=true;bufAt=performance.now();if(!bufMe)movie.pause()}      // if mine is loading too, keep trying: a paused video may never buffer on some phones
+ else{bufPartner=false;if(typeof q.vt==='number'){const tv=q.vt+lat;if(Math.abs(movie.time-tv)>.5)movie.seek(tv)}if(!bufMe)movie.play()}
+ bufUI()}
+function partnerGone(){if(bufPartner){bufPartner=false;if(m.state===S.WATCH&&!bufMe)movie.play()}bufUI()}
+function stallTick(){if(!movie.src||ads.active||m.state!==S.WATCH){stallSince=0;return}const now=performance.now();
+ if(bufMe){if(movie.ready){bufMe=false;stallSince=0;if(bufPartner)movie.pause();sync?.send({t:'buf',on:0,vt:movie.time});if(!bufPartner)movie.play();bufUI()}}
+ else if(!movie.v.paused&&!movie.ready){stallSince=stallSince||now;if(now-stallSince>1500&&sync?.present){bufMe=true;sync.send({t:'buf',on:1});bufUI()}}
+ else stallSince=0;
+ if(bufPartner&&now-bufAt>45000){bufPartner=false;if(!bufMe)movie.play();bufUI()}}          // never wait for a partner longer than 45 s
+setInterval(stallTick,250);setInterval(ping,4000);
+m.on(()=>{bufMe=bufPartner=false;stallSince=0;bufUI()});                              // any pause / break / end clears the waiting state
+movie.onfail=msg=>tip(msg);movie.onrefresh=async()=>cloudLoaded?((await fetchMovieInfo())?.url||null):null;
+function onMsg(q){if(q.t==='ping')return sync?.send({t:'pong',c:q.c});if(q.t==='pong')return gotPong(q);
+ if(q.t==='ad')return ads.remote();if(q.t==='adend')return ads.partnerEnd();if(ads.active&&(q.t==='ctl'||q.t==='seek'||q.t==='sync'||q.t==='buf'))return;if(q.t==='buf')return onBuf(q);
+ if(q.t==='ctl'){const live=q.s===S.WATCH,tv=q.vt+(live?lat:0);if(Math.abs(movie.time-tv)>(live?.5:.25))movie.seek(tv);applying=true;m.go(q.s);applying=false}
+ else if(q.t==='seek')movie.seek(q.vt+(movie.playing?lat:0));else if(q.t==='sync'){if(role===2&&m.state===S.WATCH&&q.pl&&!bufMe&&!bufPartner)movie.correct(q.vt+lat)}
  else if(q.t==='meta'){partnerMeta=q.meta;if(partnerMeta)checkMeta();if(m.state===S.END)endOverlay()}else if(q.t==='next')partnerNext(q)
  else if(q.t==='chat'){show(partner,q.x);audio.chat()}else if(q.t==='pop')partner.setPop(q.on),buttons();else if(q.t==='emo')doEmote(partner,q.e);else if(q.t==='order')canteen.receive(q.items||[]);else if(q.t==='share'){if(q.s==='start'){share.partner=true;share.pct=0}else if(q.s==='pct')share.pct=+q.p||0;else{share.partner=false;if(q.s==='done')pullCloud()}}else if(q.t==='lobby'&&APP)toLobby(true);else if(q.t==='go'&&APP){toLobby(true);inv?.onGo()}else if(q.t==='meme')memes?.remote(q.id,q.p)}
 const fileLabel=document.createElement('label');fileLabel.className='btn';fileLabel.innerHTML='🎞<input type="file" accept="video/*">';fileLabel.dataset.tip=fileLabel.ariaLabel='Choose movie file';
@@ -190,9 +220,9 @@ async function partnerNext(q){partnerMeta=null;badFile='';nextTitle=q.title||'';
  if(m.state===S.END)endOverlay()}
 m.on(s=>{if(s===S.WATCH)nextTitle=null});
 const showPick=()=>!APP||(!movie.src&&(!minfo||minfo.mode!=='cloud'));   // from Twin Hearts the 🎞 file button only appears if the movie really is missing        // minfo = the movie you picked in Twin Hearts (null when the cinema is opened on its own)
-async function loadFile(f){if(!f)return;try{const meta=await movie.load(f);badFile='';if(minfo&&minfo.dur&&Math.abs(meta.dur-minfo.dur)>3){badFile='That file is a different length than the movie you picked in Twin Hearts. Choose the same version.';movie.src=false}sync?.send({t:'meta',meta:movie.src?meta:null});tip(badFile||'Loaded '+meta.name);if(movie.src){checkMeta();autoShare(f)}}catch(err){tip(err.message)}}
+async function loadFile(f){if(!f)return;cloudLoaded=false;try{const meta=await movie.load(f);badFile='';if(minfo&&minfo.dur&&Math.abs(meta.dur-minfo.dur)>3){badFile='That file is a different length than the movie you picked in Twin Hearts. Choose the same version.';movie.src=false}sync?.send({t:'meta',meta:movie.src?meta:null});tip(badFile||'Loaded '+meta.name);if(movie.src){checkMeta();autoShare(f)}}catch(err){tip(err.message)}}
 /** the movie the person already picked on their phone, streamed by the Android app itself ({url,name}) — same checks as a picked file */
-async function loadDeviceUrl(d){if(!d||!d.url)return;try{const meta=await movie.loadUrl(d.url,d.name||minfo?.title||'Movie');badFile='';if(minfo&&minfo.dur&&Math.abs(meta.dur-minfo.dur)>3){badFile='That file is a different length than the movie you picked in Twin Hearts. Choose the same version.';movie.src=false}sync?.send({t:'meta',meta:movie.src?meta:null});tip(badFile||'Loaded '+meta.name);if(movie.src){checkMeta();autoShare({url:d.url})}}catch(err){tip(err.message)}}
+async function loadDeviceUrl(d){if(!d||!d.url)return;cloudLoaded=false;try{const meta=await movie.loadUrl(d.url,d.name||minfo?.title||'Movie');badFile='';if(minfo&&minfo.dur&&Math.abs(meta.dur-minfo.dur)>3){badFile='That file is a different length than the movie you picked in Twin Hearts. Choose the same version.';movie.src=false}sync?.send({t:'meta',meta:movie.src?meta:null});tip(badFile||'Loaded '+meta.name);if(movie.src){checkMeta();autoShare({url:d.url})}}catch(err){tip(err.message)}}
 const LEN_BAD='That file is a different length than the movie you picked in Twin Hearts. Choose the same version.';
 function verifyLength(){if(movie.src&&movie.meta&&minfo&&minfo.mode==='device'&&minfo.dur&&Math.abs(movie.meta.dur-minfo.dur)>3){badFile=LEN_BAD;movie.src=false;sync?.send({t:'meta',meta:null})}}
 fileLabel.querySelector('input').onchange=e=>loadFile(e.target.files[0]);
@@ -216,9 +246,9 @@ async function pullCloud(){if(movie.src)return;const f=await fetchMovieInfo();if
 function watchCloud(){clearInterval(pollT);if(!APP||!minfo||minfo.mode!=='device')return;let n=0;
  pollT=setInterval(()=>{if(movie.src||++n>150){clearInterval(pollT);return}if(!share.mine)pullCloud()},5000)}
 addEventListener('beforeunload',()=>shareJob?.cancel());
-async function loadCloud(){try{const meta=await movie.loadUrl(minfo.url,minfo.title||'Movie');sync?.send({t:'meta',meta});checkMeta();tip('Movie ready ♥')}catch(err){minfo={...minfo,mode:'device'};tip(err.message+' — choose your own copy of the file instead')}}
+async function loadCloud(){try{const meta=await movie.loadUrl(minfo.url,minfo.title||'Movie');cloudLoaded=true;sync?.send({t:'meta',meta});checkMeta();tip('Movie ready ♥')}catch(err){minfo={...minfo,mode:'device'};tip(err.message+' — choose your own copy of the file instead')}}
 const movieReady=()=>!minfo||minfo.mode==='none'||(movie.src&&(minfo.mode==='cloud'||(partnerMeta&&same(movie.meta,partnerMeta))));
-m.on((s,p)=>{if(s===S.WATCH){if(movie.src){hall.setScreenMap(movie.tex);hall.fitScreen(movie.aspect)}if(p===S.END||p===S.SEATED)movie.seek(0);if(p===S.SEATED)setTimeout(()=>m.state===S.WATCH&&movie.play(),3200);else movie.play()}else if(s===S.PAUSED||s===S.BREAK)movie.pause();
+m.on((s,p)=>{if(s===S.WATCH){if(movie.src){hall.setScreenMap(movie.tex);hall.fitScreen(movie.aspect)}if(p===S.END||p===S.SEATED)movie.seek(0);if(p===S.SEATED)setTimeout(()=>m.state===S.WATCH&&movie.play(),Math.max(0,3200-(applying?Math.round(lat*1000):0)));else movie.play()}else if(s===S.PAUSED||s===S.BREAK)movie.pause();
  if(s!==S.WATCH&&fullOn)exitFull();if(s===S.DOOR||s===S.ENTER||s===S.EXPLORE||s===S.SEATED)movie.pause();
  if(!applying&&sync&&[S.WATCH,S.PAUSED,S.BREAK,S.END].includes(s))sync.send({t:'ctl',s,vt:movie.time});
  $('seek').style.display=[S.WATCH,S.PAUSED,S.BREAK].includes(s)?'flex':'none'});
@@ -333,11 +363,11 @@ renderer.setAnimationLoop(()=>{const raw=clock.getDelta(),dt=Math.min(raw,.05),t
   let k=1;
   if(ix||iz){target=null;const fx=-Math.sin(rig.vy),fz=-Math.cos(rig.vy);dx=fx*-iz-fz*ix;dz=fz*-iz+fx*ix;k=Math.min(1,Math.hypot(ix,iz))}
   else if(target){dx=target.x-me.pos.x;dz=target.z-me.pos.z;const d=Math.hypot(dx,dz);if(d<.12){target=null;dx=dz=0}else k=Math.max(.3,Math.min(1,d/1.1))}
-  me.move(dx,dz,dt,hall,k);if(m.state===S.EXPLORE&&me.pos.z>DOOR_Z-.5&&Math.abs(me.pos.x)<.9)exitHall()}
+  me.move(dx,dz,dt,hall,k);if(m.state===S.EXPLORE&&me.pos.z>DOOR_Z-.85&&Math.abs(me.pos.x)<.8)exitHall()}
  if(me&&!studio.on&&m.state===S.DOOR&&!me.script&&!canteen.isOpen&&!me.seated){const lx=me.pos.x,lz=me.pos.z-DOOR_Z,nearC=lz>COUNTER_Z-.7&&Math.abs(lx)<3.5;
   if(nearC&&!atCounter){atCounter=true;target=null;me.face(0,1);canteen.open();crowd.greet(me.pos.x)}else if(!nearC&&lz<COUNTER_Z-1.4)atCounter=false;
   if(lz<1.25&&Math.abs(lx)<1&&role&&(!APP||inv?.isStarted()))startEnter()}
- movie.tick(dt);ads.tick(m.state===S.WATCH&&!applying);const now=performance.now();if(role===1&&sync?.present&&m.state===S.WATCH&&now-lastSync>3000){lastSync=now;sync.send({t:'sync',vt:movie.time,pl:movie.playing})}
+ movie.tick(dt);ads.tick(m.state===S.WATCH&&!applying);const now=performance.now();if(role===1&&sync?.present&&m.state===S.WATCH&&!bufMe&&!bufPartner&&now-lastSync>2500){lastSync=now;sync.send({t:'sync',vt:movie.time,pl:movie.playing})}
  if(movie.dur&&now-lastUI>200){lastUI=now;const v=movie.time/movie.dur*1000,tc=fmt(movie.time),td=fmt(movie.dur);if(!UI.sk.matches(':active'))UI.sk.value=v;if(!UI.fsk.matches(':active'))UI.fsk.value=v;
   if(UI.tcT!==tc){UI.tcT=tc;UI.tc.textContent=UI.ftc.textContent=tc}if(UI.tdT!==td){UI.tdT=td;UI.td.textContent=td}pl.tick()}
  hall.doorTick(dt);doorLogic(dt);pushHands(me);pushHands(partner);chatter.update(dt,t,m.is(S.WATCH));aud.forEach(a=>a.update(dt,t));if(me){me.update(dt,t);partner.update(dt,t);rig.ctx.me.copy(me.pos);rig.ctx.couple.copy(me.pos);if(partner.group.visible)rig.ctx.couple.add(partner.pos).multiplyScalar(.5);sync?.tick(performance.now(),me.av.walk,snap)}{const cx=rig.ctx,[sw,sh]=hall.dims();cx.sw=sw;cx.sh=sh;cx.sy=hall.screen.position.y;if(me){cx.chatT.copy(me.pos);if(partner.group.visible&&me.pos.distanceTo(partner.pos)<2.6)cx.chatT.add(partner.pos).multiplyScalar(.5);if(now-lastPlace>1000){lastPlace=now;placeChat()}}}
