@@ -220,3 +220,8 @@ body.pl-hide #volbtn:not(.on){opacity:0;pointer-events:none}
 #volpanel input::-moz-range-track{height:5px;border-radius:5px;background:#ffffff2e}#volpanel input::-moz-range-progress{height:5px;border-radius:5px;background:#ff9a2e}
 #volpanel input::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;margin-top:-6.5px;border-radius:50%;background:#fff;border:0;box-shadow:0 1px 4px #0008}
 #volpanel input::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:#fff;border:0}
+/* app mode: avatar banner (studio) status + "Go to lobby" */
+#st-ban{position:absolute;left:0;right:0;bottom:max(22px,env(safe-area-inset-bottom));display:flex;flex-direction:column;align-items:center;gap:10px;padding:16px 12px 4px;text-align:center;background:linear-gradient(#0000,#0b0d1ccc 40%);pointer-events:none}
+#st-ban>*{pointer-events:auto}
+#st-bt{color:#fff;font-size:15px;text-shadow:0 1px 8px #000}
+#st-ban button{background:linear-gradient(135deg,#c2305a,#8e3fd4);color:#fff;border:0;border-radius:999px;padding:12px 26px;font:inherit;font-weight:600;cursor:pointer}

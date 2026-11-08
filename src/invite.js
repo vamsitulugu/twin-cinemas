@@ -63,7 +63,7 @@ export function mountInvite(ctx){
   if(APP.host)return phase==='invited'?'Invite sent — waiting for your partner to accept…':phase==='declined'?'Your partner is not available right now':phase==='expired'?'The invite expired — send it again':'You are in the lobby. Invite your partner to join you';
   return'Waiting for the host…'}
  function render(){
-  if(started){el.style.display='none';return}
+  if(started||(ctx.hidden&&ctx.hidden())){el.style.display='none';return}
   el.style.display='flex';el.textContent='';
   const t=document.createElement('div');t.className='inv-t';t.textContent=status();el.appendChild(t);
   const row=document.createElement('div');row.className='inv-r';el.appendChild(row);

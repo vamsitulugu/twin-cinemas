@@ -15,7 +15,7 @@ export function createStudio(renderer,gl){
  const floor=new THREE.Mesh(new THREE.CircleGeometry(3.2,64),new THREE.MeshStandardMaterial({map:ft,transparent:true,roughness:.9,metalness:0}));floor.rotation.x=-Math.PI/2;floor.receiveShadow=true;scene.add(floor);
  const f=makeAvatar(gl.cf,{height:1.68,walker:true,relaxed:true,style:'f'}),m=makeAvatar(gl.cm,{height:1.8,walker:true,relaxed:true,style:'m'});
  f.group.position.set(-.5,0,0);m.group.position.set(.5,0,0);f.group.rotation.y=.28;m.group.rotation.y=-.28;scene.add(f.group,m.group);
- let yaw=0,dist=5.6,tyaw=0,tdist=5.6,focus=1,tfocus=1,down=null,spin=false,nextWave=0;
+ let pair=true,yaw=0,dist=5.6,tyaw=0,tdist=5.6,focus=1,tfocus=1,down=null,spin=false,nextWave=0;
  const cvs=renderer.domElement,live=()=>scene.userData.on;
  cvs.addEventListener('pointerdown',e=>{if(live())down={x:e.clientX,y:e.clientY,yaw:tyaw}});
  addEventListener('pointermove',e=>{if(live()&&down&&e.buttons)tyaw=down.yaw-(e.clientX-down.x)*.008});
@@ -24,6 +24,11 @@ export function createStudio(renderer,gl){
  let pd=0;cvs.addEventListener('touchmove',e=>{if(!live()||e.touches.length!==2)return;const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);if(pd)tdist=Math.min(8,Math.max(2.2,tdist-(d-pd)*.01));pd=d},{passive:true});cvs.addEventListener('touchend',()=>pd=0);
  const api={scene,on:false,
   wave(){f.emote('wave');setTimeout(()=>m.emote('wave'),450)},
+  /** slot = which avatar is you (1 girl / 2 boy). both=false: only you, centred; both=true: the couple side by side (partner waves hello). */
+  layout(slot,both){const mine=slot===1?f:m,other=slot===1?m:f;
+   if(both){f.group.visible=m.group.visible=true;f.group.position.x=-.5;m.group.position.x=.5;f.group.rotation.y=.28;m.group.rotation.y=-.28;if(!pair)setTimeout(api.wave,350)}
+   else{mine.group.visible=true;other.group.visible=false;mine.group.position.x=0;mine.group.rotation.y=0}
+   pair=both},
   toggleSpin(){spin=!spin;return spin},
   view(v){if(v==='face'){tfocus=1.62;tdist=2.6}else if(v==='body'){tfocus=.95;tdist=5.6}else{tfocus=1.1;tdist=4.2}},
   png(){const w=renderer.domElement;api.render(0,performance.now()/1000);return new Promise(r=>w.toBlob(r,'image/png'))},
