@@ -230,3 +230,13 @@ body.pl-hide #volbtn:not(.on){opacity:0;pointer-events:none}
 .nx>small{font-size:12px;color:#a9b1d9}.nx-r{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
 .nx button,.nx label.nxl{background:#ffffff18;color:#fff;border:1px solid #4a5497;border-radius:999px;padding:9px 16px;font:600 13px system-ui,sans-serif;cursor:pointer;letter-spacing:0}.nx label.nxl input{display:none}
 #mv-card.on{pointer-events:auto}#mv-card .nx{align-items:flex-start;margin-top:8px}#mv-card .nx-r{justify-content:flex-start}
+/* Twin Hearts theme for the app-style buttons: Lucide icons, magenta -> purple gradient, glass secondary buttons */
+svg.lc{flex:none;display:block}
+.nx button,.nx label.nxl,#ov button,#inv button,#inv label.pick,#inv a.inv-b,#st-ban button{display:inline-flex;align-items:center;justify-content:center;gap:8px}
+#ov button.main,#inv button.main,#st-ban button,.nx button.main{background:linear-gradient(135deg,#d6338a,#8e3fd4);border:0;color:#fff;box-shadow:0 6px 22px #8e3fd466}
+#ov button.main:disabled,#inv button.main:disabled{opacity:.45;box-shadow:none}
+.nx button,.nx label.nxl,#inv button:not(.main),#inv label.pick{background:#ffffff1a;border:1px solid #7b3d99;color:#f1defa;backdrop-filter:blur(8px)}
+.nx button:active,.nx label.nxl:active{transform:scale(.97)}
+#ov button.ghost{background:none;border:0;color:#e4c9f2;font-size:14px;margin-top:2px}
+.end-h{display:flex;align-items:center;gap:8px;color:#fff}.end-h svg{color:#ff4fa0}
+#ov small,.nx>small{color:#e4c9f2}

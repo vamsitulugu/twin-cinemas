@@ -6,6 +6,7 @@
 // e=1 means the app opened the cinema in a full-screen frame inside its own page. Then (a) the movie file you already
 // picked in Twin Hearts is handed over with postMessage (no second "choose movie"), and (b) Leave asks the app to close the frame.
 import {ONLINE} from './net.js';
+import {iconize} from './icons.js';
 import {decodeLib} from './lib-codec.js';
 const API=(import.meta.env&&import.meta.env.VITE_API_BASE)||'https://us-app-av6d.onrender.com';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -56,7 +57,7 @@ if(APP&&APP.embed)addEventListener('message',e=>{if(e.source!==window.parent||e.
 export function mountInvite(ctx){
  if(!APP)return;
  const el=document.createElement('div');el.id='inv';document.body.appendChild(el);
- const btn=(t,fn,main)=>{const b=document.createElement('button');b.textContent=t;b.onclick=fn;if(main)b.className='main';return b};
+ const btn=(t,fn,main)=>{const b=document.createElement('button');iconize(b,t);b.onclick=fn;if(main)b.className='main';return b};
  document.body.classList.add('app');                      // hides the old one-line status; this panel replaces it
  let phase=APP.invited?'invited':'lobby',msg='',inviting=false,started=false,poll=null;       // phase: lobby | invited | declined | expired
  const here=()=>!!ctx.sync()?.present;
@@ -78,12 +79,12 @@ export function mountInvite(ctx){
   const t=document.createElement('div');t.className='inv-t';t.textContent=status();el.appendChild(t);
   const row=document.createElement('div');row.className='inv-r';el.appendChild(row);
   if(needsPick()&&ctx.askNext&&canAsk()){row.appendChild(btn('🎞 From device',()=>ctx.askNext('device')));row.appendChild(btn('☁️ From cloud',()=>ctx.askNext('cloud')))}
-  else if(needsPick()){const l=document.createElement('label');l.className='pick';l.textContent='🎞 Choose movie file';const i=document.createElement('input');i.type='file';i.accept='video/*';i.onchange=()=>{const f=i.files[0];if(f)ctx.movie().pick(f)};l.appendChild(i);row.appendChild(l)}
+  else if(needsPick()){const l=document.createElement('label');l.className='pick';iconize(l,'🎞 Choose movie file');const i=document.createElement('input');i.type='file';i.accept='video/*';i.onchange=()=>{const f=i.files[0];if(f)ctx.movie().pick(f)};l.appendChild(i);row.appendChild(l)}
   if(APP.host){
    if(!here())row.appendChild(btn(inviting?'Sending…':phase==='lobby'?'💌 Invite partner':phase==='invited'?'💌 Invite again':'💌 Send invite again',invite,true)).disabled=inviting||!ONLINE;
    else{const b=row.appendChild(btn('▶ Start movie night',start,true));const m=mv();b.disabled=!!(m.info&&m.info.mode!=='none'&&!m.ready)}
   }
-  if(APP.back){const a=document.createElement('a');a.href=APP.back;a.textContent='← Twin Hearts';a.className='inv-b';if(APP.embed)a.onclick=e=>{e.preventDefault();markEnded();leaveApp()};row.appendChild(a)}}
+  if(APP.back){const a=document.createElement('a');a.href=APP.back;iconize(a,'← Twin Hearts');a.className='inv-b';if(APP.embed)a.onclick=e=>{e.preventDefault();markEnded();leaveApp()};row.appendChild(a)}}
  async function invite(){
   inviting=true;msg='';render();
   try{const r=await post('/invite',{});if(!r.ok)throw new Error(r.j&&r.j.error||'failed');phase='invited';watch()}

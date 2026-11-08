@@ -14,6 +14,7 @@ import {createLobbyCrowd} from './crowd.js';
 import {createStudio} from './studio.js';
 import {createPlayer} from './controls.js';
 import {APP,mountInvite,markEnded,fetchMovieInfo,leaveApp,handshake,fetchLibrary,canAsk,askNextMovie,listenNext} from './invite.js';
+import {ic,iconize,Heart,ArrowRight,FolderOpen} from './icons.js';
 import {mountOrient} from './orient.js';
 import {createMemes} from './memes.js';
 const $=id=>document.getElementById(id),wait=ms=>new Promise(r=>setTimeout(r,ms));
@@ -92,7 +93,7 @@ const stEl=$('st'),fadeEl=$('fade');stEl.style.display='block';
 function leaveStudio(){fadeEl.classList.add('on');setTimeout(()=>{studio.on=false;stEl.style.display='none';fadeEl.classList.remove('on')},560)}
 /* ---- app mode: the avatar banner. Only you until your partner arrives, then both of you; "Go to lobby" takes the couple on to the lobby, and from there into the hall ---- */
 const stBan=document.createElement('div');stBan.id='st-ban';
-if(APP){stBan.innerHTML='<div id="st-bt">Connecting…</div><button id="st-go" class="main">Go to lobby ▶</button>';stEl.appendChild(stBan);$('st-go').onclick=()=>toLobby(false)}
+if(APP){stBan.innerHTML='<div id="st-bt">Connecting…</div><button id="st-go" class="main">Go to lobby</button>';stEl.appendChild(stBan);$('st-go').append(ic(ArrowRight));$('st-go').onclick=()=>toLobby(false)}
 function studioRefresh(){if(!APP||!inStudio||!role)return;studio.layout(role,pHere);$('st-bt').textContent=pHere?'Your partner is here ♥':'Waiting for your partner…'}
 function toLobby(remote){if(!inStudio)return;inStudio=false;lobbyGo=true;if(!remote)sync?.send({t:'lobby'});stBan.style.display='none';leaveStudio();hint(LOBBY_TIP)}
 $('st-anim').onclick=()=>studio.wave();
@@ -160,17 +161,17 @@ let minfo=null,badFile='',nextTitle=null;       // nextTitle: a different movie 
 function movieBtns(title,label){const w=document.createElement('div');w.className='nx';
  if(label){const t=document.createElement('small');t.textContent=label;w.appendChild(t)}
  const r=document.createElement('div');r.className='nx-r';w.appendChild(r);
- const mk=(txt,fn)=>{const b=document.createElement('button');b.textContent=txt;b.onclick=e=>{e.stopPropagation();fn()};r.appendChild(b)};
+ const mk=(txt,fn)=>{const b=document.createElement('button');iconize(b,txt);b.onclick=e=>{e.stopPropagation();fn()};r.appendChild(b)};
  if(canAsk()){mk('🎞 From device',()=>askNextMovie('device',title));mk('☁️ From cloud',()=>askNextMovie('cloud',title))}
- else{const l=document.createElement('label');l.className='nxl';l.innerHTML='🎞 From device<input type="file" accept="video/*">';l.querySelector('input').onchange=e=>{const f=e.target.files[0];if(f)adoptNext({kind:'file',file:f})};r.appendChild(l)}
+ else{const l=document.createElement('label');l.className='nxl';l.append(ic(FolderOpen),'From device');{const i=document.createElement('input');i.type='file';i.accept='video/*';l.appendChild(i)}l.querySelector('input').onchange=e=>{const f=e.target.files[0];if(f)adoptNext({kind:'file',file:f})};r.appendChild(l)}
  return w}
 function endOverlay(){const ov=$('ov');if(m.state!==S.END)return;ov.textContent='';
- const h=document.createElement('div');h.textContent='The End ♥';ov.appendChild(h);
+ const h=document.createElement('div');h.className='end-h';h.append('The End',ic(Heart,26,1));ov.appendChild(h);
  const nxt=nextTitle!==null,a=document.createElement('button');a.className='main';
- a.textContent=nxt?'▶ Play '+(nextTitle?'“'+nextTitle+'”':'the next movie'):'↻ Watch again';a.onclick=()=>{hall.setCurtains(1);m.go(S.WATCH)};
+ iconize(a,nxt?'▶ Play '+(nextTitle?'“'+nextTitle+'”':'the next movie'):'↻ Watch again');a.onclick=()=>{hall.setCurtains(1);m.go(S.WATCH)};
  if(nxt&&!movieReady()){a.disabled=true;const w=document.createElement('small');w.textContent=movie.src?'Waiting for your partner to have the movie…':'Choose your copy of the movie to play it together';ov.append(a,w)}else ov.appendChild(a);
  if(APP)ov.appendChild(movieBtns('','Choose next movie'));
- const l=document.createElement('button');l.textContent='✕ Leave theatre';l.onclick=()=>{markEnded();sync?.close();if(!leaveApp())location.reload()};ov.appendChild(l);ov.style.display='flex'}
+ const l=document.createElement('button');l.className='ghost';iconize(l,'✕ Leave theatre');l.onclick=()=>{markEnded();sync?.close();if(!leaveApp())location.reload()};ov.appendChild(l);ov.style.display='flex'}
 /** a new movie came back from the app (you picked it): tell your partner, then load it. Works at the end screen and in the lobby. */
 async function adoptNext(r){if(r.kind==='cancel')return;partnerMeta=null;badFile='';
  if(canAsk()){const f=await fetchMovieInfo();if(f)minfo=f}else minfo={mode:'device',title:'',dur:0};
