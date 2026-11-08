@@ -173,21 +173,21 @@ export function buildHall(scene,renderer){
  const leaves=[mkLeaf(-1),mkLeaf(1)];
  door.position.set(0,y0+1.2,DOOR_Z-.06);scene.add(door);
  for(const e of[-1,1])box(.05,2.46,.1,dark,e*(DW+.045),y0+1.23,DOOR_Z-.1);box(DW*2+.14,.1,.1,dark,0,y0+2.45,DOOR_Z-.1);   // trim round the doorway on the hall side
- let dA=0,dV=0,dMode='shut',dDir=1,dLast=-1;                                           // angle (0 closed .. OPEN), speed, what it is doing, which way it swings (+1 into the hall, -1 into the lobby)
+ const OPEN_LOBBY=1.5;let dA=0,dV=0,dMode='shut',dDir=1,dLast=-1,dOpen=OPEN;                                           // angle (0 closed .. OPEN), speed, what it is doing, which way it swings (+1 into the hall, -1 into the lobby)
  const setLeaves=a=>{leaves[0].rotation.y=a*dDir;leaves[1].rotation.y=-a*dDir};
  box(.7,.22,.06,new THREE.MeshBasicMaterial({color:0x3dff7a}),0,y0+2.95,DOOR_Z+.1);
  sign(0,y0+2.75,DOOR_Z-.03,Math.PI);
 
  const push=(p,r,b)=>{const cx2=cl(p.x,b.x0,b.x1),cz=cl(p.z,b.z0,b.z1),dx=p.x-cx2,dz=p.z-cz,d=Math.hypot(dx,dz);if(d<r){if(d>1e-4){p.x=cx2+dx/d*r;p.z=cz+dz/d*r}else p.z=b.z0-r}};
  const api={lobby,lobbyMode:false,discs:[],dims:()=>dims,seats,taken,door,screen,cL,cR,picks,floors:[flat,...treads],setScreen,fitScreen:a=>setScreen(kind,a),setScreenMap(t){screenMat.map=t||stex;screenMat.needsUpdate=true},sizes:Object.keys(SIZES),
-  /** push the door open (dir +1 swings into the hall, -1 into the lobby) or let the closer shut it. doorTick(dt) must run every frame. */
-  doorTo(open,dir=1){if(open){if(dMode!=='open'){if(dA<.02)dDir=dir>=0?1:-1;dMode='open';dV=Math.max(dV,2.6)}}else{dMode='shut';dV=0}},
+  /** push the door open (dir +1 swings into the hall when you push from the lobby, -1 swings into the lobby when you push from the hall) or let the closer shut it. doorTick(dt) must run every frame. */
+  doorTo(open,dir=1){if(open){if(dMode!=='open'){if(dA<.02){dDir=dir>=0?1:-1;dOpen=dDir>0?OPEN:OPEN_LOBBY}dMode='open';dV=Math.max(dV,2.6)}}else{dMode='shut';dV=0}},
   doorTick(dt){dt=Math.min(dt,.05);
-   if(dMode==='open'){dV+=((OPEN-dA)*24-dV*7)*dt;dA+=dV*dt;if(dA>OPEN){dA=OPEN;dV=-Math.abs(dV)*.3}}                       // pushed: fast start, eases onto the door stop, tiny bounce
+   if(dMode==='open'){dV+=((dOpen-dA)*24-dV*7)*dt;dA+=dV*dt;if(dA>dOpen){dA=dOpen;dV=-Math.abs(dV)*.3}}                       // pushed: fast start, eases onto the door stop, tiny bounce
    else if(dA>0){dA-=Math.max(.3,Math.min(1.3,dA*1.8))*dt;dV=0;if(dA<=0){dA=0;api.onDoorShut?.()}}                          // door closer: steady, slows down for the last bit, then latches
    if(dA!==dLast){dLast=dA;setLeaves(dA)}},
-  doorAngle:()=>dA,doorOpenAngle:OPEN,onDoorShut:null,
-  setDoor(u){dMode=u>0?'open':'shut';dA=u*OPEN;dV=0;setLeaves(dA)},
+  doorAngle:()=>dA,doorOpenAngle:()=>dOpen,onDoorShut:null,
+  setDoor(u){dMode=u>0?'open':'shut';dA=u*dOpen;dV=0;setLeaves(dA)},
   /** house=1 full lights, 0.07 movie dark */
   setLights(v){lobby.setLights(v);hemi.intensity=.06+.64*v;spot.intensity=60*v;lamps.forEach(l=>l.intensity=.7*v);bayLights.forEach(l=>l.intensity=9*v);warm.emissiveIntensity=.12+.88*v;washMats.forEach(m=>m.opacity=.1+.8*v);
    stepMat.emissiveIntensity=.5+.8*v;dlMat.color.setScalar(.2+.8*v);scene.environmentIntensity=.05+.3*v;glow.intensity=6*(1-v)},

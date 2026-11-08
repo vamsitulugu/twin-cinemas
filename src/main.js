@@ -48,10 +48,10 @@ const canteen=createCanteen({canGift:()=>!!sync?.present,sfx:n=>audio[n]?.(),
 const LOBBY_TIP='Walk anywhere (WASD / tap the floor) · stand at the counter to order · walk through the door to go in';
 const COL={1:0xff5c8a,2:0x4db2ff},KIND={1:['cf',1.68],2:['cm',1.8]},LX={1:-.5,2:.5};
 let doorIdle=0;
-const openDoor=()=>{if(doorOpen)return Promise.resolve();doorOpen=true;doorIdle=0;hall.doorTo(true,1);audio.doorPush();return new Promise(r=>setTimeout(r,650))};   // pushed open; resolves once it is nearly wide
+const openDoor=(dir=1)=>{if(doorOpen)return Promise.resolve();doorOpen=true;doorIdle=0;hall.doorTo(true,dir);audio.doorPush();return new Promise(r=>setTimeout(r,650))};   // pushed open; resolves once it is nearly wide
 const closeDoor=()=>{if(!doorOpen)return;doorOpen=false;hall.doorTo(false)};hall.onDoorShut=()=>audio.doorShut();
 const doorLogic=dt=>{if(!doorOpen)return;const near=p=>p&&(p===me||p.group.visible)&&Math.abs(p.pos.z-DOOR_Z)<1.3&&Math.abs(p.pos.x)<1.7;doorIdle=near(me)||near(partner)||m.state===S.ENTER?0:doorIdle+dt;if(doorIdle>1.5)closeDoor()};   // the closer shuts it once nobody is in the doorway
-const pushHands=p=>{if(!p)return;const dz=p.pos.z-DOOR_Z,want=p.av.walk&&dz>-.3&&dz<.8&&Math.abs(p.pos.x)<1.2&&hall.doorAngle()<hall.doorOpenAngle*.8;if(want)p.av.act='push';else if(p.av.act==='push')p.av.act=''};   // arms forward while pushing the door
+const pushHands=p=>{if(!p)return;const dz=p.pos.z-DOOR_Z,want=p.av.walk&&Math.abs(dz)<.8&&Math.abs(p.pos.x)<1.2&&hall.doorAngle()<hall.doorOpenAngle()*.8;if(want)p.av.act='push';else if(p.av.act==='push')p.av.act=''};   // arms forward while pushing the door
 const fsOn=()=>document.documentElement.requestFullscreen?.().catch(()=>{}),fsOff=()=>document.fullscreenElement&&document.exitFullscreen();
 /* state machine drives everything */
 let lit=1;const fade=(to,ms)=>{const a=lit;return tween(ms,u=>{lit=a+(to-a)*u;hall.setLights(lit)})};
@@ -77,7 +77,7 @@ function buttons(){bar.innerHTML='';const s=m.state;
  if(me&&!m.is(S.DOOR,S.ENTER)){bar.append(...RAIL)}          // chat / alerts / leave live in the same right-hand rail
  if(view==='full'){bar.innerHTML='';B('✕','Exit full screen',exitFull)}}
 m.on(async(s,p)=>{const ui=$('door-ui'),ov=$('ov');ui.style.display=s===S.DOOR?'flex':'none';ov.style.display='none';hall.lobbyMode=s===S.DOOR;crowd.setActive(s===S.DOOR||s===S.ENTER);if(s!==S.DOOR&&canteen.isOpen)canteen.close();
- if(s===S.DOOR){setView('door');tip();closeDoor()}
+ if(s===S.DOOR){hall.setRoom(false);if(p===S.EXPLORE)setView('follow',{yaw:Math.PI,pitch:.5,dist:4.5});else setView('door');tip();closeDoor();if(p===S.EXPLORE)hint(LOBBY_TIP)}   // back from the hall: the camera follows you round the lobby again (the fixed door shot is only for the very start)
  if(s===S.ENTER){tip('');setView('follow',{yaw:0,pitch:.55,dist:4});hall.lobby.hideTray();await me.walk([[LX[role],DOOR_Z+.6]]);openDoor();await me.walk([[LX[role],DOOR_Z-1.1]],.85);m.go(S.EXPLORE)}   // walk up, hands reach the door and push it, walk through
  if(s===S.EXPLORE){hall.setRoom(true);hint('WASD / arrows or tap the floor to walk · drag to look · tap a seat');if(p===S.SEATED)setView('follow',{pitch:.55,dist:4})}
  if(s===S.SEATED){setView('seat',{yaw:Math.PI*.15,pitch:.4,dist:3.2});hint(sync?.present?'You are seated. Start when you are both seated.':'You are seated. Start the movie when ready.')}
@@ -122,7 +122,7 @@ async function join(r){if(role)return;role=r;leaveStudio();audio.init();vol.show
  sync=await createSync(code,r,{
   onJoin(){partner.group.visible=true;stat('Your partner is in the lobby ♥');hint(m.state===S.DOOR?LOBBY_TIP:'');buttons()},
   onHello(){sync?.send({t:'pos',...snap()});if(APP&&inv?.isStarted())sync?.send({t:'go'});if(movie.meta)sync?.send({t:'meta',meta:movie.meta})},onMsg,
-  onPos(q){if(!partner.tgt)partner.net(q,true);else partner.net(q);partner.group.visible=true;if(q.z<DOOR_Z+.7)openDoor();
+  onPos(q){if(!partner.tgt)partner.net(q,true);else partner.net(q);partner.group.visible=true;{const dz=q.z-DOOR_Z;if(Math.abs(dz)<.8)openDoor(dz>0?1:-1)}
    if(q.s&&!partnerSeat)partnerSit(q.s);else if(!q.s&&partnerSeat&&!partner.script)partnerStand();if(!!q.pc!==!!partner.popcorn)partner.setPop(!!q.pc);if(!!q.dr!==!!partner.drink)partner.setDrink(!!q.dr)},
   onSit:q=>partnerSit(q.id),onStand:()=>partnerStand(),
   onLeave(){stat('Your partner left');tip('Your partner left the theatre');partner.group.visible=false;if(partnerSeat){hall.taken.delete(partnerSeat.id);hall.setSeatHighlight(partnerSeat.id,0);partnerSeat=null}partner.busy=false;buttons()},
@@ -133,6 +133,12 @@ async function sitDown(){const seat=hall.seats.get(pending);if(!seat)return;cons
  await wait(sync?.present?250:0);if(lost===id){mySeat=null;lost=null;hall.setSeatHighlight(id,0);tip('Your partner got that seat first — pick another');buttons();partnerSit(id);return}
 
  await me.walk(hall.route(me.pos,seat));await me.sit(seat);hall.setSeatHighlight(id,COL[role]);m.go(S.SEATED)}
+let leaving=false;
+/** walk out of the hall: push the door open toward the lobby, step through, and you are back in the lobby (the door closer shuts it behind you) */
+async function exitHall(){if(leaving||!me||m.state!==S.EXPLORE||me.script||me.seated)return;leaving=true;target=null;pending=null;
+ const x=Math.max(-.2,Math.min(.2,me.pos.x));
+ setView('follow',{yaw:Math.PI,pitch:.42,dist:3.4});await me.walk([[x,DOOR_Z-.58]],1.2);hall.setRoom(false);openDoor(-1);await me.walk([[x,DOOR_Z+1.7]],.85);
+ m.go(S.DOOR);leaving=false}
 async function standUp(){sync?.send({t:'stand'});hall.setSeatHighlight(mySeat.id,0);await me.stand(mySeat);mySeat=null;m.go(S.EXPLORE)}
 /* ---- movie: sync, full screen, seek ---- */
 let applying=false,partnerMeta=null,lastSync=0,fullOn=false;const fv=$('fv'),fc=$('fc');
@@ -255,7 +261,7 @@ renderer.setAnimationLoop(()=>{const raw=clock.getDelta(),dt=Math.min(raw,.05),t
   let k=1;
   if(ix||iz){target=null;const fx=-Math.sin(rig.vy),fz=-Math.cos(rig.vy);dx=fx*-iz-fz*ix;dz=fz*-iz+fx*ix;k=Math.min(1,Math.hypot(ix,iz))}
   else if(target){dx=target.x-me.pos.x;dz=target.z-me.pos.z;const d=Math.hypot(dx,dz);if(d<.12){target=null;dx=dz=0}else k=Math.max(.3,Math.min(1,d/1.1))}
-  me.move(dx,dz,dt,hall,k)}
+  me.move(dx,dz,dt,hall,k);if(m.state===S.EXPLORE&&me.pos.z>DOOR_Z-.5&&Math.abs(me.pos.x)<.9)exitHall()}
  if(me&&m.state===S.DOOR&&!me.script&&!canteen.isOpen&&!me.seated){const lx=me.pos.x,lz=me.pos.z-DOOR_Z,nearC=lz>COUNTER_Z-.7&&Math.abs(lx)<3.5;
   if(nearC&&!atCounter){atCounter=true;target=null;me.face(0,1);canteen.open();crowd.greet(me.pos.x)}else if(!nearC&&lz<COUNTER_Z-1.4)atCounter=false;
   if(lz<1.25&&Math.abs(lx)<1&&role&&!APP)startEnter()}
