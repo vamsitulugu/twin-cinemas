@@ -239,7 +239,7 @@ const pl=createPlayer({movie,fmt,
  more:()=>[['🎥 Next camera · '+viewLabel(),nextAngle],['🪟 Choose a view',openViews],
   [m.state===S.BREAK?'▶ End the break':'☕ Take a break',()=>m.go(m.state===S.BREAK?S.WATCH:S.BREAK)],
   ['🍿 '+(me?.popcorn?'Put popcorn away':'Popcorn'),togglePop],[muted?'🔔 Alerts on':'🔕 Alerts off',toggleAlerts],['🎚 Sound mixer',()=>vol.toggle()],['🎵 Music on/off',()=>audio.musicToggle()],['⏭ Next song',()=>audio.next()],['🚪 Leave theatre',leaveTheatre]],
- reactions:()=>[['❤️','Send love',()=>emote('heart')],['👋','Wave',()=>emote('wave')],['👏','Clap',()=>emote('clap')],['🍿',me?.popcorn?'Put popcorn away':'Popcorn',togglePop]],
+ reactions:()=>REACT.map(([k,label])=>[k==='wave'?'👋':EMO[k],label,()=>emote(k)]),
  log:()=>chatLog,get extra(){return showPick()?fileLabel:null},
  hooks:{message:()=>toggleChat()}});                                // voice / video: not built yet, the player shows "coming soon"
 m.on((s,p)=>{const who=applying?'Your partner':'You',vt=movie.time;
@@ -277,8 +277,12 @@ m.on(()=>{chatCam=null;if(m.is(S.DOOR,S.ENTER))closeChat();else chatShot();place
 function sendChat(){const i=$('ci'),v=i.value.trim();if(!v||!me)return;show(me,v);sync?.send({t:'chat',x:v});audio.chat();i.value=''}
 $('ci').onkeydown=e=>{e.stopPropagation();if(e.key==='Enter')sendChat();else if(e.key==='Escape')closeChat()};$('cs').onclick=sendChat;addEventListener('resize',placeChat);
 function togglePop(){const on=!me.popcorn;me.setPop(on);sync?.send({t:'pop',on});if(on)audio.crunch();buttons()}
-function doEmote(p,e){if(e==='wave')p.av.emote('wave');else{const ch=e==='heart'?'❤️':'👏';head.copy(p.pos);head.y+=2.2;head.project(camera);const f=document.createElement('div');f.className='fl';f.textContent=ch;f.style.left=(head.x*.5+.5)*innerWidth+'px';f.style.top=(-head.y*.5+.5)*innerHeight+'px';document.body.appendChild(f);setTimeout(()=>f.remove(),2000)}
- if(e==='heart')audio.heart()}
+/* reactions: key -> emoji floated above the head (wave is the avatar animation). Your partner gets the same key; an older version just shows a clap. */
+const EMO={heart:'❤️',clap:'👏',laugh:'😂',rofl:'🤣',love:'😍',blush:'🥰',kiss:'😘',hug:'🤗',wow:'😮',scared:'😱',cry:'😢',broken:'💔',fire:'🔥',party:'🎉',like:'👍',cool:'😎',shy:'🙈',thanks:'🙏',sleepy:'😴'};
+const REACT=[['heart','Send love'],['wave','Wave'],['clap','Clap'],['laugh','Laugh'],['rofl','Dying of laughter'],['love','Love it'],['blush','Adore'],['kiss','Kiss'],['hug','Hug'],['wow','Wow'],['scared','Scared'],['cry','Cry'],['broken','Heartbreak'],['fire','Fire'],['party','Celebrate'],['like','Like'],['cool','Cool'],['shy','Shy'],['thanks','Thank you'],['sleepy','Sleepy']];
+function doEmote(p,e){if(e==='wave')p.av.emote('wave');else{const ch=EMO[e]||'👏',n=e==='party'||e==='fire'?3:1;
+  for(let i=0;i<n;i++)setTimeout(()=>{head.copy(p.pos);head.y+=2.2;head.project(camera);const f=document.createElement('div');f.className='fl';f.textContent=ch;f.style.left=((head.x*.5+.5)*innerWidth+(n>1?(i-1)*38:0))+'px';f.style.top=(-head.y*.5+.5)*innerHeight+'px';document.body.appendChild(f);setTimeout(()=>f.remove(),2000)},i*150)}
+ if(e==='heart'||e==='love'||e==='kiss')audio.heart()}
 function emote(e){doEmote(me,e);sync?.send({t:'emo',e})}
 function leaveTheatre(){if(confirm('Leave the theatre?')){markEnded();sync?.close();if(!leaveApp())location.reload()}}$('leave').onclick=leaveTheatre;let muted=false;function toggleAlerts(){muted=!muted;audio.mute(muted);$('snd').textContent=muted?'🔕':'🔔'}$('snd').onclick=toggleAlerts;
 m.on((s,p)=>{$('top-r').style.display=s===S.DOOR?'none':(s===S.ENTER?'none':'flex');$('joy').style.display=s===S.EXPLORE&&matchMedia('(pointer:coarse)').matches?'block':'none';

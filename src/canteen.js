@@ -1,3 +1,4 @@
+import {rail} from './rail.js';
 import {ic,Coins,Popcorn,HeartHandshake,CupSoda,Coffee,IceCreamCone,Sandwich,Donut,ChefHat,ShoppingCart,ShoppingBasket} from './icons.js';
 import {CATS as ALLCATS,MENU as ALL,slug} from './menu.js';
 /* Real photos: drop them in src/food/<slug>.jpg (see src/food/README.txt). Once ANY photo exists the canteen lists ONLY the items that have one;
@@ -24,7 +25,7 @@ export function createCanteen(h={}){
  const root=document.createElement('div');root.id='canteen';root.innerHTML=`<div class="cn-head"><b>${svg(Popcorn,20)}Twin Cinema’s Canteen</b><span>Counter 1 · made fresh for the two of you</span><em class="cn-bal"></em><button class="cn-x" aria-label="Close">✕</button></div>
   <div class="cn-tabs"></div><div class="cn-body"></div><div class="cn-foot"></div><div class="cn-sheet"></div>`;document.body.appendChild(root);
  const $=s=>root.querySelector(s),tabs=$('.cn-tabs'),body=$('.cn-body'),foot=$('.cn-foot'),sheet=$('.cn-sheet');
- const bagBtn=document.createElement('button');bagBtn.id='bagbtn';bagBtn.style.display='none';document.body.appendChild(bagBtn);
+ const bagBtn=document.createElement('button');bagBtn.id='bagbtn';bagBtn.style.display='none';bagBtn.title=bagBtn.ariaLabel='My snacks';rail.appendChild(bagBtn);
  const bagPanel=document.createElement('div');bagPanel.id='bagpanel';document.body.appendChild(bagPanel);
  const toastEl=document.createElement('div');toastEl.id='toast';document.body.appendChild(toastEl);let tt;
  const toast=t=>{toastEl.textContent=t;toastEl.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>toastEl.classList.remove('on'),4200)};
@@ -92,13 +93,15 @@ export function createCanteen(h={}){
  const bagState=()=>({popcorn:bag.some(b=>b.vis==='popcorn'||b.vis2?.includes('popcorn')),drink:bag.some(b=>b.vis==='drink'||b.vis2?.includes('drink'))});
  function addBag(lines,mine){if(!mine)return;for(const l of lines){const it=l.item||l,name=it.name,key=name+'|'+(l.picks||[]).join(',');const ex=bag.find(b=>b.key===key);if(ex)ex.left+=l.qty;else bag.push({key,name,e:it.e,vis:it.vis,vis2:it.vis2,picks:l.picks||[],left:l.qty})}bagChanged()}
  function receive(items){for(const l of items){const key=l.name+'|'+(l.picks||[]).join(','),ex=bag.find(b=>b.key===key);if(ex)ex.left+=l.qty;else bag.push({key,name:l.name,e:l.e,vis:l.vis,vis2:l.vis2,picks:l.picks||[],left:l.qty})}bagChanged();toast('💝 Your partner treated you: '+items.map(l=>`${l.qty}× ${l.name}`).join(', '));h.sfx?.('gift')}
- function bagChanged(){const n=bag.reduce((a,b)=>a+b.left,0);bagBtn.textContent=`🧺 My snacks${n?` (${n})`:''}`;h.onBag?.(bagState());renderBag()}
+ function bagChanged(){const n=bag.reduce((a,b)=>a+b.left,0);bagBtn.innerHTML=svg(ShoppingBasket,22)+(n?`<b class="bd">${n>99?'99+':n}</b>`:'');h.onBag?.(bagState());renderBag()}
  function renderBag(){bagPanel.innerHTML=`<div class="bp-h"><b>${svg(ShoppingBasket,18)} My snacks</b><button class="cn-x2">✕</button></div>`+(bag.length?bag.map((b,i)=>`<div class="bp-i"><span class="e">${thumb(b.name)}</span><span class="m"><b>${esc(b.name)}</b><small>${esc(b.picks.slice(0,4).join(' · '))}</small></span><span class="k">×${b.left}</span><button data-i="${i}">😋 Enjoy</button></div>`).join(''):'<p class="empty">Nothing yet. Order from the canteen in the lobby ♥</p>');
-  bagPanel.onclick=e=>{if(e.target.closest('.cn-x2')){bagPanel.style.display='none';return}const b=e.target.closest('button[data-i]');if(!b)return;const it=bag[+b.dataset.i];it.left--;h.sfx?.(it.vis==='drink'?'sip':it.vis==='popcorn'?'crunch':'bite');if(it.left<=0)bag.splice(+b.dataset.i,1);bagChanged();bagPanel.style.display='block'}}
- bagBtn.onclick=()=>{renderBag();bagPanel.style.display=bagPanel.style.display==='block'?'none':'block'};bagChanged();
+  bagPanel.onclick=e=>{if(e.target.closest('.cn-x2')){setBagOpen(false);return}const b=e.target.closest('button[data-i]');if(!b)return;const it=bag[+b.dataset.i];it.left--;h.sfx?.(it.vis==='drink'?'sip':it.vis==='popcorn'?'crunch':'bite');if(it.left<=0)bag.splice(+b.dataset.i,1);bagChanged();setBagOpen(true)}}
+ const setBagOpen=o=>{bagPanel.style.display=o?'block':'none';bagBtn.classList.toggle('on',o);if(o)document.dispatchEvent(new CustomEvent('rail-open',{detail:'bag'}))};
+ document.addEventListener('rail-open',e=>{if(e.detail!=='bag')setBagOpen(false)});
+ bagBtn.onclick=()=>{renderBag();setBagOpen(bagPanel.style.display!=='block')};bagChanged();
 
  function openMenu(){if(open)return;open=true;view='menu';root.style.display='flex';renderBal();render();
   h.balance?.().then(b=>{if(typeof b==='number'){bal=b;renderBal();if(open){renderFoot();if(view==='cart')renderCart()}}}).catch(()=>{})}
  function close(){open=false;root.style.display='none';sheet.style.display='none';h.onClose?.()}
  $('.cn-x').onclick=()=>{if(!busy)close()};
- return{open:openMenu,close,get isOpen(){return open},receive,toast,showBag(on){bagBtn.style.display=on?'block':'none';if(!on)bagPanel.style.display='none'},get bagState(){return bagState()}}}
+ return{open:openMenu,close,get isOpen(){return open},receive,toast,showBag(on){bagBtn.style.display=on?'grid':'none';if(!on)setBagOpen(false)},get bagState(){return bagState()}}}

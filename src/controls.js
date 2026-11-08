@@ -21,6 +21,7 @@ const ICON={
  log:'<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
  phone:'<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>',
  video:'<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>',
+ smile:'<circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/>',
  end:'<rect x="5" y="5" width="14" height="14" rx="2"/>',
  more:'<circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/>'};
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -36,12 +37,12 @@ export function createPlayer(c){
    <div class="pl-title"><b></b><span class="pill"></span></div>
    <div class="pl-tr"><button class="ib" data-a="mute" title="Sound (M)"></button><button class="ib" data-a="full" title="Full screen (F)"></button></div></div>
   <div class="pl-mid"><button class="skip" data-a="b10" title="Back 10 s (←)">${ic(ICON.ccw,44)}<i>10</i></button><button class="big" data-a="play" title="Play / pause (space)"></button><button class="skip" data-a="f10" title="Forward 10 s (→)">${ic(ICON.cw,44)}<i>10</i></button></div>
-  <button class="pl-emoji" data-a="emoji" title="Reactions">😊</button>
   <div class="pl-bot"><div class="pl-seek"><span class="tc">0:00</span><input class="sk" type="range" min="0" max="1000" value="0" aria-label="Seek"><span class="td">0:00</span></div>
    <div class="pl-row">
     <button class="tb" data-a="sync" title="Sync the movie with your partner">${ic(ICON.sync)}<span>Sync</span></button>
     <button class="tb" data-a="message">${ic(ICON.msg)}<span>Message</span><i class="dot"></i></button>
     <button class="tb" data-a="log">${ic(ICON.log)}<span>Log</span><i class="dot"></i></button>
+    <button class="tb" data-a="emoji" title="Reactions">${ic(ICON.smile)}<span>React</span></button>
     <button class="tb" data-a="voice">${ic(ICON.phone)}<span>Voice</span></button>
     <button class="tb" data-a="video">${ic(ICON.video)}<span>Video</span></button>
     <button class="tb" data-a="end" title="End the movie">${ic(ICON.end)}<span>End</span></button>
@@ -77,7 +78,7 @@ export function createPlayer(c){
  const PANELS=['more','emoji','log'],esc2=esc;
  function renderPanel(){for(const p of PANELS){const box=q(`.pnl[data-p=${p}]`),open=panel===p;box.classList.toggle('open',open);q(`[data-a=${p}]`)?.classList.toggle('sel',open);if(!open)continue;
    if(p==='more'){const items=c.more();box.innerHTML=items.map((m,i)=>`<button data-m="${i}">${esc(m[0])}</button>`).join('');box._items=items;if(c.extra&&st!=='watch')box.appendChild(c.extra)}
-   else if(p==='emoji'){const items=c.reactions();box.innerHTML=items.map((m,i)=>`<button data-m="${i}" class="rx" title="${esc2(m[1])}" aria-label="${esc2(m[1])}">${m[0]}</button>`).join('');box._items=items}
+   else if(p==='emoji'){const items=c.reactions();box.innerHTML=`<div class="rx-h"><b>Reactions</b><small>Stays open · tap as many as you like</small><button class="rx-x" data-a="closep" aria-label="Close reactions">✕</button></div><div class="rx-g" data-keep-emoji>`+items.map((m,i)=>`<button data-m="${i}" class="rx" title="${esc2(m[1])}" aria-label="${esc2(m[1])}">${m[0]}</button>`).join('')+'</div>';box._items=items}
    else{const rows=c.log();box.innerHTML=`<div class="lg-h">Activity &amp; chat</div>`+(rows.length?rows.map(r=>`<div class="lg ${r.k}${r.mine?' me':''}"><time>${fmt(r.vt)}</time><span>${esc(r.x)}</span></div>`).join(''):'<div class="lg sys"><span>Nothing yet</span></div>');box.scrollTop=box.scrollHeight}}}
  const toggle=p=>{panel=panel===p?null:p;if(panel==='log')setBadge('log',false);renderPanel();show()};
  const toast=t=>{const e=q('.pl-toast');e.textContent=t;e.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>e.classList.remove('on'),2200)};
@@ -86,6 +87,7 @@ export function createPlayer(c){
 
  /* actions */
  function act(a){switch(a){
+  case'closep':closePanel();break;
   case'back':closePanel();c.seatView();break;
   case'mute':c.mute.set(!c.mute.get());break;
   case'full':closePanel();c.full.toggle();setTimeout(()=>{lastIcons='';refresh()},120);break;
@@ -97,7 +99,7 @@ export function createPlayer(c){
   case'message':closePanel();setBadge('message',false);hk.message?.();break;
   // UI only: wire these to Twin Hearts through c.hooks
   case'voice':case'video':if(hk[a])hk[a]();else toast((a==='voice'?'Voice':'Video')+' calls are coming soon');break}}
- el.addEventListener('click',e=>{const mi=e.target.closest('[data-m]');if(mi){const it=mi.closest('.pnl')._items[+mi.dataset.m];closePanel();it[it.length-1]();return}
+ el.addEventListener('click',e=>{const mi=e.target.closest('[data-m]');if(mi){const pn=mi.closest('.pnl'),it=pn._items[+mi.dataset.m];if(pn.dataset.p!=='emoji')closePanel();else{mi.classList.remove('pop');void mi.offsetWidth;mi.classList.add('pop')}it[it.length-1]();return}
   const b=e.target.closest('[data-a]');if(b){act(b.dataset.a);b.blur()}});
  addEventListener('keydown',e=>{if(!on()||e.target.tagName==='INPUT'||e.ctrlKey||e.metaKey||e.altKey)return;const k=e.key.toLowerCase();
   if(k===' '||k==='k'){e.preventDefault();c.playPause()}else if(k==='arrowleft'||k==='j')act('b10');else if(k==='arrowright'||k==='l')act('f10');

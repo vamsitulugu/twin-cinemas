@@ -1,6 +1,7 @@
 // Meme soundboard. ONE floating button (😂) that works everywhere: the avatar studio, the lobby / canteen and inside the hall.
 // It opens a sheet with every sound (name + length). Tap a sound to play it; tap it again to stop. If your partner is in the room they hear it too.
 // Files live in /public/memes/<id>.mp3 . To add a sound: drop the mp3 there and add one line to CLIPS ( id, name shown, emoji, seconds ).
+import {rail} from './rail.js';
 const DIR='/memes/';
 const CLIPS=[
  ['address-pettu-full',"Address pettu (full)",'📍',27.8],
@@ -38,8 +39,8 @@ const CLIPS=[
  ['vaadu-vinadu',"Vaadu vinadu",'🙉',3.6],
  ['yedava-bava-vadu',"Yedava bava vadu",'😒',4.8]];
 const CSS=`
-#mm-btn{position:fixed;z-index:11;left:max(10px,env(safe-area-inset-left));top:44%;transform:translateY(-50%);width:46px;height:46px;border-radius:50%;padding:0;font-size:24px;line-height:1;display:grid;place-items:center;background:linear-gradient(145deg,#e8620f,#f5821f);border:2px solid #ffd2a3;box-shadow:0 4px 16px #0008,0 0 18px #f5821f66;transition:opacity .3s,transform .15s}
-#mm-btn:active{transform:translateY(-50%) scale(.92)}body.pl-hide #mm-btn{opacity:0;pointer-events:none}
+#mm-btn{width:46px;height:46px;border-radius:50%;padding:0;font-size:24px;line-height:1;display:grid;place-items:center;background:linear-gradient(145deg,#e8620f,#f5821f);border:2px solid #ffd2a3;box-shadow:0 4px 16px #0008,0 0 18px #f5821f66;transition:opacity .3s,transform .15s}
+#mm-btn:active{transform:scale(.92)}body.pl-hide #mm-btn{opacity:0;pointer-events:none}
 #mm-btn.on{animation:mmpulse 1s ease-out infinite}@keyframes mmpulse{0%{box-shadow:0 4px 16px #0008,0 0 0 0 #ffb15ccc}100%{box-shadow:0 4px 16px #0008,0 0 0 16px #ffb15c00}}
 #mm{position:fixed;inset:0;z-index:15;display:none;align-items:flex-end;justify-content:center;background:#000b;touch-action:pan-y}#mm.on{display:flex}
 .mm-box{width:min(720px,100%);height:min(86%,760px);display:flex;flex-direction:column;background:radial-gradient(120% 60% at 50% 0,#252b5a 0,#161a3a 55%);border:1px solid #ffb15c44;border-radius:20px 20px 0 0;box-shadow:0 -10px 40px #000a;animation:mmup .22s ease-out}
@@ -72,7 +73,7 @@ export function createMemes({audio,send,present}){
  const grid=el('div','mm-g');grid.dataset.keepEmoji='';const empty=el('div','mm-empty','No sound found');empty.hidden=true;
  const foot=el('div','mm-f'),hint=el('span',0,'Tap to play · tap again to stop'),stopB=el('button',0,'⏹ Stop');foot.append(hint,stopB);
  box.append(head,sw,grid,foot);
- const toast=el('div','mm-t');document.body.append(btn,sheet,toast);
+ const toast=el('div','mm-t');rail.appendChild(btn);document.body.append(sheet,toast);
  const cards=new Map();let cur=null,isBoth=true,tt=0,warmed=false;
  const note=t=>{toast.textContent=t;toast.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>toast.classList.remove('on'),2200)};
  for(const[id,name,emo,d]of CLIPS){const c=el('button','mm-c'),t=el('span','t',name),eq=el('span','mm-eq');eq.append(el('i'),el('i'),el('i'));
