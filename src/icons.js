@@ -52,5 +52,5 @@ export function mountIcons(){
   if(!raf)raf=requestAnimationFrame(flush)});
  mo.observe(document.body,OPT);
 }
-export {Coins,Play,RotateCcw,LogOut,Cloud,FolderOpen,Mail,ArrowRight,ArrowLeft,Heart,Popcorn,Layers,Rotate3d,Flame,HandHeart,
+export {Megaphone,SkipForward,Hourglass,Coins,Play,RotateCcw,LogOut,Cloud,FolderOpen,Mail,ArrowRight,ArrowLeft,Heart,Popcorn,Layers,Rotate3d,Flame,HandHeart,
  IceCreamCone,CupSoda,Sandwich,Pizza,Croissant,Donut,Cake,Candy,Lollipop,Citrus,GlassWater,Cookie,Utensils,Drumstick,Wheat,Beef,Cherry,Dessert,Milk,ChefHat,Coffee,Gift,HeartHandshake,ShoppingCart,ShoppingBasket,Film,Sparkles,Plus,X};
