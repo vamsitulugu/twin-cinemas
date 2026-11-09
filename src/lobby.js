@@ -49,6 +49,7 @@ function signCanvas(){const c=mk(512,128),x=c.getContext('2d');x.fillStyle='#fff
 /* ---------- builder ---------- */
 export function buildLobby(scene,{y0,DOOR_Z}){
  const Z=z=>DOOR_Z+z,Y=y=>y0+y,boxes=[],hits=[],lights=[],glows=[];
+ let lobbyOn=true;
  const M=(c,o)=>new THREE.MeshStandardMaterial({color:c,roughness:.8,metalness:.05,...o});
  const add=(m,x,y,z,p=scene)=>{m.position.set(x,y,z);p.add(m);return m};
  const box=(w,h,d,mat,x,y,z,p)=>add(new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat),x,y,z,p);
@@ -175,7 +176,7 @@ export function buildLobby(scene,{y0,DOOR_Z}){
   showTray(kinds){tray.children.slice(1).forEach(c=>tray.remove(c));const list=kinds.slice(0,8),n=list.length;list.forEach((k,i)=>{const o=(MAKE[k]||food)();o.position.x=(i-(n-1)/2)*(1.3/Math.max(n,3));o.position.z=(i%2?.1:-.08);tray.add(o)});tray.visible=n>0},
   hideTray(){tray.visible=false},
   /** house=1 full lights; lobby lights fade with the hall so they never leak light into a dark movie */
-  setOn(on){lights.forEach(([l])=>l.visible=on);tvs.setOn(on)},
-  setLights(v){tvs.setLights(v);lights.forEach(([l,i])=>l.intensity=i*v);glows.forEach(m=>m.opacity=.04+.08*v)},
+  setOn(on){lobbyOn=on;lights.forEach(([l,i],k)=>{l.visible=on||k<2;l.intensity=on?i:i*.45});tvs.setOn(on)},   // in the hall the two lights nearest the door stay on (dimmed): through the door glass / open door you see the lobby, not darkness
+  setLights(v){tvs.setLights(v);lights.forEach(([l,i])=>l.intensity=i*v*(lobbyOn?1:.45));glows.forEach(m=>m.opacity=.04+.08*v)},
   update(t){frames.update(Math.min(.1,Math.max(0,t-lt)));lt=t;pop.rotation.y=Math.sin(t*.8)*.04;for(let i=0;i<pdata.length;i++){const p=pdata[i];mt.setPosition(p[0],p[1]+Math.sin(t*3+p[3])*.012,p[2]);pop.setMatrixAt(i,mt)}pop.instanceMatrix.needsUpdate=true;
    const k=.55+.45*Math.sin(t*1.2);neonM.color.setRGB(1,.28+.12*k,.25+.1*k);tvs.update(t)}}}

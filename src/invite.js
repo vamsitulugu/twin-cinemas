@@ -81,8 +81,10 @@ export function shareToCloud(src,{title,dur,onProgress}={}){
 const toApp=m=>{try{window.parent.postMessage({src:'twin-cinema',...m},APP.backOrigin)}catch(e){}};
 /** Leave to the app: closes the frame when embedded, otherwise goes to the back link. false = nothing to go back to. */
 export const leaveApp=()=>{if(!APP)return false;if(APP.embed){toApp({type:'leave'});return true}if(APP.back){location.href=APP.back;return true}return false};
-let waitFile=!!(APP&&APP.embed);                     // true until the app has answered (file or "no file") — the lobby then says "Loading your movie…" instead of asking to choose one
+let waitFile=!!(APP&&(APP.embed||APP.movieUrl));                     // true until the app has answered (file or "no file") — the lobby then says "Loading your movie…" instead of asking to choose one
 /** Ask the app for the movie file it already has (the one picked on Watch Together). cb(file|null) is called once. Gives up after 8 s → the normal "choose your copy" button appears. */
+/** the app's own movie has finished loading (or failed): stop saying "Loading your movie…" */
+export const fileSettled=()=>{waitFile=false};
 export function handshake(cb){
  if(!APP||!APP.embed)return;
  let done=false,tries=0;

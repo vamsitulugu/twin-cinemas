@@ -69,7 +69,7 @@ export function buildHall(scene,renderer){
 
  /* ---------- shell ---------- */
  const D=DOOR_Z-FRONT_Z,CZ=(DOOR_Z+FRONT_Z)/2;
- const shell=new THREE.Mesh(new THREE.BoxGeometry(HALF*2,CEIL0+.1,D),[wall,wall,ceilMat,ceilMat,backWall,frontWall]);shell.position.set(0,(CEIL0+.1)/2,CZ);scene.add(shell);
+ const shell=new THREE.Mesh(new THREE.BoxGeometry(HALF*2,CEIL0+.1,D),[wall,wall,ceilMat,ceilMat,new THREE.MeshBasicMaterial({visible:false}),frontWall]);   // +z face hidden: the back wall is built below WITH a doorwayshell.position.set(0,(CEIL0+.1)/2,CZ);scene.add(shell);
 
  /* ---------- floors: red carpet stage + stepped rows ---------- */
  const ct=carpetTex(),fz1=rowZ(1)-.325,fl=fz1-FRONT_Z;ct.repeat.set(HALF*2/2.4,fl/2.4);
@@ -173,6 +173,9 @@ export function buildHall(scene,renderer){
   door.add(piv);return piv};
  const leaves=[mkLeaf(-1),mkLeaf(1)];
  door.position.set(0,y0+1.2,DOOR_Z-.06);scene.add(door);
+ {const H=CEIL0+.1,sh=new THREE.Shape();sh.moveTo(-HALF,0);sh.lineTo(HALF,0);sh.lineTo(HALF,H);sh.lineTo(-HALF,H);sh.closePath();   // hall back wall: same doorway as the lobby side, so there is NO wall behind the door any more
+  const h=new THREE.Path();h.moveTo(-DW,y0);h.lineTo(DW,y0);h.lineTo(DW,y0+2.4);h.lineTo(-DW,y0+2.4);h.closePath();sh.holes.push(h);
+  const bw=new THREE.Mesh(new THREE.ShapeGeometry(sh),backWall);bw.position.z=DOOR_Z-.004;scene.add(bw)}
  for(const e of[-1,1])box(.05,2.46,.1,dark,e*(DW+.045),y0+1.23,DOOR_Z-.1);box(DW*2+.14,.1,.1,dark,0,y0+2.45,DOOR_Z-.1);   // trim round the doorway on the hall side
  const OPEN_LOBBY=1.5;let dA=0,dV=0,dMode='shut',dDir=1,dLast=-1,dOpen=OPEN;                                           // angle (0 closed .. OPEN), speed, what it is doing, which way it swings (+1 into the hall, -1 into the lobby)
  const setLeaves=a=>{leaves[0].rotation.y=a*dDir;leaves[1].rotation.y=-a*dDir};
