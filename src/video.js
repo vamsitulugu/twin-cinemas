@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 /** One movie, two sources: a local video file, or a 30 s demo clock (so every flow works without a file). Same API either way.
  *  Sync-safety rules (shared with the Watch Together page / Android app):
- *   - drift is fixed by a gentle speed nudge (>0.4 s); only drift over 1.5 s causes a hard seek, and at most one every 4 s
+ *   - drift is fixed by a gentle speed nudge (>0.4 s); only drift over 2.5 s causes a hard seek, and at most one every 4 s
  *   - no correction at all while the video is buffering / seeking (that was the "stuck" thrash)
  *   - loading has a 30 s timeout and friendly errors; a cloud movie that errors mid-way is reloaded at the same time */
-const LOAD_MS=30000,COOLDOWN=4000,NUDGE=.4,HARD=1.5;
+const LOAD_MS=30000,COOLDOWN=4000,NUDGE=.4,HARD=2.5;
 const ERR={1:'Loading the movie was interrupted',2:'Network problem while loading the movie — check your connection',3:'This video could not be decoded — use an MP4 (H.264 + AAC) copy',4:'This video format is not supported here — use an MP4 (H.264 + AAC) copy'};
 export class Movie{
  constructor(){this.v=document.createElement('video');Object.assign(this.v,{playsInline:true,preload:'auto',className:'hv'});document.body.appendChild(this.v);

@@ -71,8 +71,8 @@ export function createPlayer(c){
  /* seek + clock (call every frame) */
  function tick(){if(!on())return;const d=movie.dur||0;if(!seeking&&d){sk.value=movie.time/d*1000;const t=fmt(movie.time);if(t!==lastTc){lastTc=t;q('.tc').textContent=t}}
   const td=fmt(d);if(td!==lastTd){lastTd=td;q('.td').textContent=td}sk.style.setProperty('--p',(sk.value/10)+'%');refresh()}
- sk.addEventListener('input',()=>{seeking=true;const f=sk.value/1000;lastTc=fmt(f*(movie.dur||0));q('.tc').textContent=lastTc;sk.style.setProperty('--p',(sk.value/10)+'%');c.seekFrac(f);show()});
- sk.addEventListener('change',()=>{seeking=false;sk.blur();show()});   // blur: so Space / arrows keep working as player shortcuts
+ sk.addEventListener('input',()=>{seeking=true;const f=sk.value/1000;lastTc=fmt(f*(movie.dur||0));q('.tc').textContent=lastTc;sk.style.setProperty('--p',(sk.value/10)+'%');show()});   // drag = preview only; the jump (and the partner's) happens once, on release
+ sk.addEventListener('change',()=>{seeking=false;c.seekFrac(sk.value/1000);sk.blur();show()});   // blur: so Space / arrows keep working as player shortcuts
 
  /* panels: More (menu), Emoji (reactions), Log (activity + chat). One is open at a time. */
  const PANELS=['more','emoji','log'],esc2=esc;
