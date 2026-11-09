@@ -2,8 +2,11 @@
 import {createClient} from '@supabase/supabase-js';
 const env=import.meta.env||{},URL=env.VITE_SUPABASE_URL,KEY=env.VITE_SUPABASE_ANON_KEY;
 export const ONLINE=Boolean(URL&&KEY);
+/** a raw two-phone message channel (Supabase Realtime broadcast, or BroadcastChannel for two tabs) -> {send(m),close()}. The scene and the movie each open their own. */
+export async function openChannel(code,onMsg){return open(code,onMsg)}
+let shared=null;const client=()=>shared||(shared=createClient(URL,KEY,{realtime:{params:{eventsPerSecond:20}}}));
 async function open(code,onMsg){
- if(ONLINE){const sb=createClient(URL,KEY,{realtime:{params:{eventsPerSecond:20}}}),ch=sb.channel('twin:'+code,{config:{broadcast:{self:false}}});
+ if(ONLINE){const sb=client(),ch=sb.channel('twin:'+code,{config:{broadcast:{self:false}}});
   ch.on('broadcast',{event:'m'},e=>onMsg(e.payload));
   await new Promise(res=>{ch.subscribe(s=>s==='SUBSCRIBED'&&res());setTimeout(res,6000)});
   return{send:m=>ch.send({type:'broadcast',event:'m',payload:m}),close:()=>sb.removeChannel(ch)}}
