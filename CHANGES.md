@@ -1,3 +1,8 @@
+# Movie system replaced by the Twin Hearts movie-page engine (Nov 9, 2026)
+- New `src/watch.js` (shared room + shared clock + buffering hold + drift correction, same as Watch Together); `src/video.js` and the cinema's own sync removed.
+- `main.js`: ping/pong, scheduled start, buf/sync/meta/seek messages, auto-share, next-movie picker removed; the scene (`ctl`) is separate from the movie (room).
+- Ad breaks pause/resume the room. Tests: `node tests/watch-sync.test.mjs`.
+
 # What changed in this update
 
 1. SEAT BUG FIXED. The chat / alerts / leave buttons were moved into the button bar, but the bar is

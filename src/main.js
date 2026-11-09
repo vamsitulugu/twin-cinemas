@@ -6,15 +6,15 @@ import {createVolume} from './volume.js';
 import {loadAvatars,makeAvatar,seatAudience,seatedChatter} from './avatar.js';
 import {createMachine,S} from './state.js';
 import {createSync,ONLINE} from './net.js';
-import {Movie,fmt} from './video.js';
+import {Watch,fmt} from './watch.js';
 import {audio} from './audio.js';
 import {createCanteen} from './canteen.js';
 import {COUNTER_Z,LW,LD} from './lobby.js';
 import {createLobbyCrowd} from './crowd.js';
 import {createStudio} from './studio.js';
 import {createPlayer} from './controls.js';
-import {APP,fetchBalance,payOrder,mountInvite,markEnded,fetchMovieInfo,leaveApp,handshake,fileSettled,fetchLibrary,canAsk,askNextMovie,listenNext,shareToCloud} from './invite.js';
-import {ic,iconize,mountIcons,Heart,ArrowRight,FolderOpen} from './icons.js';mountIcons();
+import {APP,API,fetchBalance,payOrder,mountInvite,markEnded,fetchMovieInfo,leaveApp,handshake,fileSettled,fetchLibrary} from './invite.js';
+import {ic,iconize,mountIcons,Heart,ArrowRight} from './icons.js';mountIcons();
 import {mountOrient} from './orient.js';
 import {createMemes} from './memes.js';
 import {createAdBreak} from './adbreak.js';
@@ -29,7 +29,7 @@ const scene=new THREE.Scene();scene.background=new THREE.Color(0x0a0605);
 const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,.1,80);
 const fit=()=>{camera.aspect=innerWidth/innerHeight;camera.fov=camera.aspect<1?78:55;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)};fit();addEventListener('resize',fit);
 const hall=buildHall(scene,renderer),rig=new CameraRig(camera,renderer.domElement,{onManual:()=>setView('orbit')});
-const movie=new Movie();const vol=createVolume({audio,movie});
+const movie=new Watch(APP?{api:API,couple:APP.couple,role:APP.user}:{});const vol=createVolume({audio,movie});
 let gl;try{gl=await loadAvatars(p=>$('loading').textContent='LOADING THEATRE… '+Math.round(p*100)+'%')}catch(e){$('loading').textContent='Could not load avatars: '+e.message;throw e}
 const aud=seatAudience(scene,hall,gl),chatter=seatedChatter(aud),studio=createStudio(renderer,gl);studio.on=true;try{await renderer.compileAsync(scene,camera);hall.setRoom(true);await renderer.compileAsync(scene,camera);hall.setRoom(false)}catch(e){hall.setRoom(false)}
 /* the lobby crowd: canteen sellers, queues, friends chatting. Only exists (and only costs anything) while the couple is in the lobby. The counter itself is left out of the obstacles so the sellers can stand behind it. */
@@ -41,7 +41,9 @@ const stepSfx=who=>{const d=who===me?0:Math.hypot(who.pos.x-me.pos.x,who.pos.z-m
 const SPAWN_Z=DOOR_Z+7.2;                                       // middle of the canteen floor: between the door wall and the counter, inside the queue lane
 const spawn=(kind,h,color,x)=>{const p=new Player(makeAvatar(gl[kind],{height:h,walker:true,relaxed:true,style:kind==='cf'?'f':'m'}),color);scene.add(p.group);p.pos.set(x,floorY(SPAWN_Z),SPAWN_Z);p.group.rotation.y=0;return p};
 let me=null,partner=null,role=0,sync=null,partnerSeat=null,doorOpen=false,inv=null,memes=null;
-const ads=createAdBreak({movie,send:m=>sync?.send(m),present:()=>!!sync?.present,leader:()=>role===1||!sync?.present});     // ad breaks: your own video, then Google ads (src/ads-config.js)
+const ads=createAdBreak({movie,send:m=>sync?.send(m),present:()=>!!sync?.present,leader:()=>role===1||!sync?.present,
+ onBegin:()=>{if(role===1||!sync?.present)movie.send(false,'ad')},      // the room pauses while the ad runs, so nobody loses movie time to it
+ onResume:()=>{if(role===1||!sync?.present)movie.send(true);movie.follow()}});     // ad breaks: your own video, then Google ads (src/ads-config.js)
 let inStudio=false,pHere=false,lobbyGo=false;      // app mode: the avatar banner (studio) comes first; lobbyGo = we already left it for the lobby
 hall.lobbyMode=true;                                   // the hall starts with the couple outside, in the lobby (keeps the lobby floor limits from the very first step)
 let bagPrev={popcorn:false,drink:false};
@@ -119,7 +121,7 @@ function mvCard(mv){const id=mv?mv.id:null;if(id===mvId)return;mvId=id;mvc.class
  const b=el('div','mv-b');b.appendChild(el('h3',0,mv.title));
  const meta=[mv.year,mv.genre].filter(Boolean).join(' · ');if(meta)b.appendChild(el('div','mv-m',meta));
  const r=el('div','mv-r');if(mv.rating!=null&&mv.rating!=='')r.appendChild(el('span','mv-s','★ '+(+Number(mv.rating).toFixed(1))+(mv.max?'/'+mv.max:'')));if(mv.fav)r.appendChild(el('span','mv-s','⭐ Favourite'));if(STAT[mv.status])r.appendChild(el('span','mv-t',STAT[mv.status]));if(OWN[mv.owner])r.appendChild(el('span','mv-o',OWN[mv.owner]));if(r.children.length)b.appendChild(r);
- b.appendChild(el('p',0,mv.overview||'No review or description yet.'));if(APP)b.appendChild(movieBtns(mv.title,'Watch a different movie'));mvc.appendChild(b)}
+ b.appendChild(el('p',0,mv.overview||'No review or description yet.'));mvc.appendChild(b)}
 /* actions */
 let blocked=false,atCounter=false;
 const startEnter=()=>{if(blocked||m.state!==S.DOOR)return;audio.ambient(.05);m.go(S.ENTER)};
@@ -136,11 +138,11 @@ async function join(r){if(role)return;role=r;if(APP)inStudio=true;else leaveStud
  setView('follow',{yaw:Math.PI,pitch:.5,dist:4.5});canteen.showBag(true);hint(LOBBY_TIP);
  sync=await createSync(code,r,{
   onJoin(){partner.group.visible=true;pHere=true;stat('Your partner is in the lobby ♥');hint(m.state===S.DOOR?LOBBY_TIP:'');buttons();studioRefresh()},
-  onHello(){ping();sync?.send({t:'pos',...snap()});if(lobbyGo)sync?.send({t:'lobby'});if(APP&&inv?.isStarted())sync?.send({t:'go'});if(movie.meta)sync?.send({t:'meta',meta:movie.meta})},onMsg,
+  onHello(){sync?.send({t:'pos',...snap()});if(lobbyGo)sync?.send({t:'lobby'});if(APP&&inv?.isStarted())sync?.send({t:'go'})},onMsg,
   onPos(q){if(!partner.tgt)partner.net(q,true);else partner.net(q);partner.group.visible=true;{const dz=q.z-DOOR_Z;if(Math.abs(dz)<.8)openDoor(dz>0?1:-1)}
    if(q.s&&!partnerSeat)partnerSit(q.s);else if(!q.s&&partnerSeat&&!partner.script)partnerStand();if(!!q.pc!==!!partner.popcorn)partner.setPop(!!q.pc);if(!!q.dr!==!!partner.drink)partner.setDrink(!!q.dr)},
   onSit:q=>partnerSit(q.id),onStand:()=>partnerStand(),
-  onLeave(){partnerGone();share.partner=false;pHere=false;studioRefresh();stat('Your partner left');tip('Your partner left the theatre');partner.group.visible=false;if(partnerSeat){hall.taken.delete(partnerSeat.id);hall.setSeatHighlight(partnerSeat.id,0);partnerSeat=null}partner.busy=false;buttons()},
+  onLeave(){partnerGone();pHere=false;studioRefresh();stat('Your partner left');tip('Your partner left the theatre');partner.group.visible=false;if(partnerSeat){hall.taken.delete(partnerSeat.id);hall.setSeatHighlight(partnerSeat.id,0);partnerSeat=null}partner.busy=false;buttons()},
   onConflict(){stat('That seat in the room is already taken — reload and pick the other person');blocked=true;sync?.close()}});
  stat('Waiting for your partner at the door…');studioRefresh()}
 document.querySelectorAll('#roles button').forEach(b=>b.onclick=()=>join(+b.dataset.r));$('room').value=decodeURIComponent(location.hash.slice(1));
@@ -160,107 +162,53 @@ async function exitHall(){if(leaving||!me||m.state!==S.EXPLORE||me.script||me.se
  m.go(S.DOOR);leaving=false}
 async function standUp(){sync?.send({t:'stand'});hall.setSeatHighlight(mySeat.id,0);await me.stand(mySeat);mySeat=null;m.go(S.EXPLORE)}
 /* ---- movie: sync, full screen, seek ---- */
-let applying=false,partnerMeta=null,lastSync=0,fullOn=false,cloudLoaded=false;
-let lat=0,bufMe=false,bufPartner=false,bufAt=0,stallSince=0,startT=0,startPend=false,graceUntil=0,remoteStart=null;const rtts=[];     // lat = one-way delay to your partner in seconds (from ping/pong); buf* = who is waiting for video dataconst fv=$('fv'),fc=$('fc');
-const same=(a,b)=>a&&b&&(APP||a.size===b.size)&&Math.abs(a.dur-b.dur)<(APP?4:2);      // from Twin Hearts the match is by length (same as the Watch Together page)
-const checkMeta=()=>{if(movie.meta&&partnerMeta)tip(same(movie.meta,partnerMeta)?'Both of you have the same movie ♥':'Heads up: your partner picked a different file, so you will not see the same movie');else if(movie.meta&&sync?.present)tip('Waiting for your partner to choose the same movie file')};
-/* ---- latency estimate + "partner is loading" (stall) handling ----
-   ping/pong every 4 s -> median round trip / 2 = lat; every time / seek the partner sends is moved forward by lat while the movie plays.
-   If your video waits for data for 1.5 s while watching, your partner pauses ("loading") and both resume together when you are ready. */
+/* ---- movie: the Twin Hearts Watch Together engine (src/watch.js) — shared room, shared clock, buffering hold, drift correction ---- */
+let applying=false,fullOn=false;const fv=$('fv'),fc=$('fc');
 const bufEl=document.createElement('div');bufEl.style.cssText='position:fixed;left:50%;top:max(70px,env(safe-area-inset-top));transform:translateX(-50%);z-index:70;padding:9px 18px;border-radius:999px;font:600 14px system-ui,sans-serif;color:#fff;background:rgba(43,6,29,.9);border:1px solid rgba(194,26,139,.45);pointer-events:none;display:none;white-space:nowrap';document.body.appendChild(bufEl);
-/* ---- SCHEDULED START: play / resume / seek-while-watching never start "right now". The sender says "be at time vt and press play in X ms";
-   both seek to vt first, load it during the pre-roll, and press play together (X minus the one-way delay on the receiving side).
-   This is what stops the stall -> pause -> seek -> stall loop: nobody has to seek AFTER the movie is already running. */
-const LEAD=1500,BUF_LEAD=3000;
-function cancelStart(){clearTimeout(startT);startPend=false}
-function playAt(vt,inMs){cancelStart();inMs=Math.max(0,inMs);startPend=true;graceUntil=performance.now()+inMs+3000;
- if(Math.abs(movie.time-vt)>.25)movie.seek(vt);movie.pause();
- startT=setTimeout(()=>{startPend=false;graceUntil=performance.now()+3000;if(m.state!==S.WATCH||ads.active||bufMe||bufPartner)return;
-  if(Math.abs(movie.time-vt)>.4)movie.seek(vt);movie.play()},inMs)}
-function bufUI(){const t=bufPartner?'⏳ Your partner is loading…':bufMe?'⏳ Loading — your partner will wait for you':'';bufEl.textContent=t;bufEl.style.display=t?'block':'none'}
-function gotPong(q){const r=performance.now()-q.c;if(!(r>=0&&r<5000))return;rtts.push(r);if(rtts.length>7)rtts.shift();const s=[...rtts].sort((a,b)=>a-b);lat=Math.min(1.5,s[s.length>>1]/2000)}
-function ping(){if(sync?.present)sync.send({t:'ping',c:performance.now()})}
-function onBuf(q){if(m.state!==S.WATCH)return;
- if(q.on){bufPartner=true;bufAt=performance.now();cancelStart();if(!bufMe)movie.pause()}      // if mine is loading too, keep trying: a paused video may never buffer on some phones
- else{bufPartner=false;if(!bufMe)playAt(typeof q.vt==='number'?q.vt:movie.time,(q.in||BUF_LEAD)-lat*1000)}
- bufUI()}
-function partnerGone(){if(bufPartner){bufPartner=false;if(m.state===S.WATCH&&!bufMe)playAt(movie.time,LEAD)}bufUI()}
-function stallTick(){if(!movie.src||ads.active||m.state!==S.WATCH||startPend){stallSince=0;return}const now=performance.now();
- if(bufMe){if(movie.ready){bufMe=false;stallSince=0;sync?.send({t:'buf',on:0,vt:movie.time,in:BUF_LEAD});if(!bufPartner)playAt(movie.time,BUF_LEAD);bufUI()}}
- else if(!movie.v.paused&&!movie.ready&&now>graceUntil){stallSince=stallSince||now;if(now-stallSince>3000&&sync?.present){bufMe=true;sync.send({t:'buf',on:1});bufUI()}}
- else stallSince=0;
- if(bufPartner&&now-bufAt>45000){bufPartner=false;if(!bufMe)playAt(movie.time,LEAD);bufUI()}}          // never wait for a partner longer than 45 s
-setInterval(stallTick,250);setInterval(ping,4000);
-m.on(s=>{bufMe=bufPartner=false;stallSince=0;if(s!==S.WATCH)cancelStart();bufUI()});                              // any pause / break / end clears the waiting state
+movie.onstatus=t=>{bufEl.textContent=t||'';bufEl.style.display=t?'block':'none'};
 movie.onfail=msg=>tip(msg);movie.onrefresh=async()=>cloudLoaded?((await fetchMovieInfo())?.url||null):null;
-function onMsg(q){if(q.t==='ping')return sync?.send({t:'pong',c:q.c});if(q.t==='pong')return gotPong(q);
- if(q.t==='ad')return ads.remote();if(q.t==='adend')return ads.partnerEnd();if(ads.active&&(q.t==='ctl'||q.t==='seek'||q.t==='sync'||q.t==='buf'))return;if(q.t==='buf')return onBuf(q);
- if(q.t==='ctl'){const live=q.s===S.WATCH,sched=live&&q.in>0,tv=q.vt+(live&&!sched?lat:0);if(!sched&&Math.abs(movie.time-tv)>(live?.5:.25))movie.seek(tv);remoteStart=sched?{vt:q.vt,inMs:q.in-lat*1000}:null;applying=true;m.go(q.s);applying=false;remoteStart=null}
- else if(q.t==='seek'){if(q.in>0&&m.state===S.WATCH)playAt(q.vt,q.in-lat*1000);else movie.seek(q.vt)}else if(q.t==='sync'){if(role===2&&m.state===S.WATCH&&q.pl&&!bufMe&&!bufPartner&&!startPend&&performance.now()>graceUntil)movie.correct(q.vt+lat)}
- else if(q.t==='meta'){partnerMeta=q.meta;if(partnerMeta)checkMeta();if(m.state===S.END)endOverlay()}else if(q.t==='next')partnerNext(q)
- else if(q.t==='chat'){show(partner,q.x);audio.chat()}else if(q.t==='pop')partner.setPop(q.on),buttons();else if(q.t==='emo')doEmote(partner,q.e);else if(q.t==='order')canteen.receive(q.items||[]);else if(q.t==='share'){if(q.s==='start'){share.partner=true;share.pct=0}else if(q.s==='pct')share.pct=+q.p||0;else{share.partner=false;if(q.s==='done')pullCloud()}}else if(q.t==='lobby'&&APP)toLobby(true);else if(q.t==='go'&&APP){toLobby(true);inv?.onGo()}else if(q.t==='meme')memes?.remote(q.id,q.p)}
+/** your partner played / paused / sought (web: realtime, Android: the server): the scene follows the room. A "loading" pause keeps the scene as it is, like the movie page. */
+movie.onremote=({playing,reason})=>{if(reason==='buffering'||ads.active)return;applying=true;
+ if(playing&&[S.PAUSED,S.BREAK].includes(m.state))m.go(S.WATCH);else if(!playing&&m.state===S.WATCH&&reason!=='end')m.go(reason==='break'?S.BREAK:S.PAUSED);applying=false};
+function partnerGone(){movie.onstatus('')}
+m.on(s=>{if(s!==S.WATCH)movie.onstatus('')});
+function onMsg(q){
+ if(q.t==='ad')return ads.remote();if(q.t==='adend')return ads.partnerEnd();if(ads.active&&q.t==='ctl')return;
+ if(q.t==='ctl'){applying=true;m.go(q.s);applying=false}
+ else if(q.t==='chat'){show(partner,q.x);audio.chat()}else if(q.t==='pop')partner.setPop(q.on),buttons();else if(q.t==='emo')doEmote(partner,q.e);else if(q.t==='order')canteen.receive(q.items||[]);else if(q.t==='lobby'&&APP)toLobby(true);else if(q.t==='go'&&APP){toLobby(true);inv?.onGo()}else if(q.t==='meme')memes?.remote(q.id,q.p)}
 const fileLabel=document.createElement('label');fileLabel.className='btn';fileLabel.innerHTML='🎞<input type="file" accept="video/*">';fileLabel.dataset.tip=fileLabel.ariaLabel='Choose movie file';
-let minfo=null,badFile='',nextTitle=null,appFile=false;      // appFile: movie came from Twin Hearts itself (picked there): trusted, never thrown away, nobody is asked to choose it again
-// nextTitle: a different movie was chosen after / before this one (null = still the first movie)
-/* two buttons that open the Twin Hearts app's own movie picker (device / cloud); outside the app frame only the local file button exists */
-function movieBtns(title,label){const w=document.createElement('div');w.className='nx';
- if(label){const t=document.createElement('small');t.textContent=label;w.appendChild(t)}
- const r=document.createElement('div');r.className='nx-r';w.appendChild(r);
- const mk=(txt,fn)=>{const b=document.createElement('button');iconize(b,txt);b.onclick=e=>{e.stopPropagation();fn()};r.appendChild(b)};
- if(canAsk()){mk('🎞 From device',()=>askNextMovie('device',title));mk('☁️ From cloud',()=>askNextMovie('cloud',title))}
- else{const l=document.createElement('label');l.className='nxl';l.append(ic(FolderOpen),'From device');{const i=document.createElement('input');i.type='file';i.accept='video/*';l.appendChild(i)}l.querySelector('input').onchange=e=>{const f=e.target.files[0];if(f)adoptNext({kind:'file',file:f})};r.appendChild(l)}
- return w}
+let minfo=null,badFile='',cloudLoaded=false;      // minfo = the movie the two of you picked on Twin Hearts Watch Together (null when the cinema is opened on its own)
+/* The movie is picked on the Twin Hearts Watch Together page, exactly as before. The theatre only plays it: the file handed over by the app, the shared cloud copy,
+   or (last resort, nothing was handed over) a file chosen here. Who is playing / paused / where is decided by the room (src/watch.js), never by this file. */
+const showPick=()=>!APP||(!movie.src&&(!minfo||minfo.mode!=='cloud'));
+const LEN_BAD='That file is a different length than the movie you picked in Twin Hearts. Choose the same version.';
+function lenOk(meta){return !(minfo&&minfo.mode==='device'&&minfo.dur&&Math.abs(meta.dur-minfo.dur)>3)}      // same tolerance as the Watch Together page
+async function loadFile(f){if(!f)return;cloudLoaded=false;try{const meta=await movie.load(f);badFile='';if(!lenOk(meta)){badFile=LEN_BAD;movie.src=false}tip(badFile||'Loaded '+meta.name)}catch(err){tip(err.message)}}
+/** the movie the person already picked on their phone, streamed by the Android app itself ({url,name}) */
+async function loadDeviceUrl(d){if(!d||!d.url)return;cloudLoaded=false;try{const meta=await movie.loadUrl(d.url,d.name||minfo?.title||'Movie');badFile='';if(!lenOk(meta)){badFile=LEN_BAD;movie.src=false}tip(badFile||'Loaded '+meta.name)}catch(err){tip(err.message)}}
+fileLabel.querySelector('input').onchange=e=>loadFile(e.target.files[0]);
+/** the shared cloud movie (signed URL from the Twin Hearts backend) */
+async function loadCloud(){try{await movie.loadUrl(minfo.url,minfo.title||'Movie');cloudLoaded=true;tip('Movie ready ♥')}catch(err){minfo={...minfo,mode:'device'};tip(err.message+' — choose your own copy of the file instead')}}
+const movieReady=()=>!minfo||minfo.mode==='none'||movie.src;
+/** the movie starts for both: back at 0:00, playing, written to the room so your partner's screen starts at the same moment */
+function startRoom(){movie.seek(0);movie.play();movie.send(true)}
 function endOverlay(){const ov=$('ov');if(m.state!==S.END)return;ov.textContent='';
  const h=document.createElement('div');h.className='end-h';h.append('The End',ic(Heart,26,1));ov.appendChild(h);
- const nxt=nextTitle!==null,a=document.createElement('button');a.className='main';
- iconize(a,nxt?'▶ Play '+(nextTitle?'“'+nextTitle+'”':'the next movie'):'↻ Watch again');a.onclick=()=>{hall.setCurtains(1);m.go(S.WATCH)};
- if(nxt&&!movieReady()){a.disabled=true;const w=document.createElement('small');w.textContent=movie.src?'Waiting for your partner to have the movie…':'Choose your copy of the movie to play it together';ov.append(a,w)}else ov.appendChild(a);
- if(APP)ov.appendChild(movieBtns('','Choose next movie'));
- const l=document.createElement('button');l.className='ghost';iconize(l,'✕ Leave theatre');l.onclick=()=>{markEnded();sync?.close();if(!leaveApp())location.reload()};ov.appendChild(l);ov.style.display='flex'}
-/** a new movie came back from the app (you picked it): tell your partner, then load it. Works at the end screen and in the lobby. */
-async function adoptNext(r){if(r.kind==='cancel')return;partnerMeta=null;badFile='';
- if(canAsk()){const f=await fetchMovieInfo();if(f)minfo=f}else minfo={mode:'device',title:'',dur:0};
- nextTitle=minfo?.title||'';sync?.send({t:'next',title:nextTitle});
- if(r.kind==='file')await loadFile(r.file,true);else if(minfo?.mode==='cloud')await loadCloud();else tip('Could not load that movie — try again');
- if(m.state===S.END)endOverlay()}
-/** your partner chose a different movie: cloud loads by itself, a device movie asks for your own copy (through the app picker) */
-async function partnerNext(q){partnerMeta=null;badFile='';nextTitle=q.title||'';
- const f=await fetchMovieInfo();if(f)minfo=f;
- if(minfo?.mode==='cloud')await loadCloud();else{movie.src=false;movie.meta=null;tip('Your partner chose '+(nextTitle?'“'+nextTitle+'”':'a new movie')+' — choose your copy')}
- if(m.state===S.END)endOverlay()}
-m.on(s=>{if(s===S.WATCH)nextTitle=null});
-const showPick=()=>!APP||(!movie.src&&(!minfo||minfo.mode!=='cloud'));   // from Twin Hearts the 🎞 file button only appears if the movie really is missing        // minfo = the movie you picked in Twin Hearts (null when the cinema is opened on its own)
-async function loadFile(f,fromApp=false){if(!f)return;cloudLoaded=false;try{const meta=await movie.load(f);badFile='';appFile=fromApp;if(!fromApp&&minfo&&minfo.dur&&Math.abs(meta.dur-minfo.dur)>3){badFile='That file is a different length than the movie you picked in Twin Hearts. Choose the same version.';movie.src=false}sync?.send({t:'meta',meta:movie.src?meta:null});tip(badFile||'Loaded '+meta.name);if(movie.src){checkMeta();autoShare(f)}}catch(err){tip(err.message)}}
-/** the movie the person already picked on their phone, streamed by the Android app itself ({url,name}) — same checks as a picked file */
-async function loadDeviceUrl(d,fromApp=false){if(!d||!d.url)return;cloudLoaded=false;try{const meta=await movie.loadUrl(d.url,d.name||minfo?.title||'Movie');badFile='';appFile=fromApp;if(!fromApp&&minfo&&minfo.dur&&Math.abs(meta.dur-minfo.dur)>3){badFile='That file is a different length than the movie you picked in Twin Hearts. Choose the same version.';movie.src=false}sync?.send({t:'meta',meta:movie.src?meta:null});tip(badFile||'Loaded '+meta.name);if(movie.src){checkMeta();autoShare({url:d.url})}}catch(err){tip(err.message)}}
-const LEN_BAD='That file is a different length than the movie you picked in Twin Hearts. Choose the same version.';
-function verifyLength(){if(appFile)return;if(movie.src&&movie.meta&&minfo&&minfo.mode==='device'&&minfo.dur&&Math.abs(movie.meta.dur-minfo.dur)>3){badFile=LEN_BAD;movie.src=false;sync?.send({t:'meta',meta:null})}}
-fileLabel.querySelector('input').onchange=e=>loadFile(e.target.files[0]);
-/* ---- auto-share (Twin Hearts only): whoever has the movie uploads it ONCE to the shared cloud; the other phone streams it by itself,
-   so nobody is asked to "choose the same file" again. Progress is shown in the lobby panel; if cloud sharing is not available the normal flow stays. ---- */
-const share={mine:false,partner:false,pct:0};let shareJob=null,pollT=null;
-const shareMsg=x=>sync?.send({t:'share',...x});
-function autoShare(src){if(!APP||!ONLINE||!src||shareJob||share.mine)return;
- setTimeout(async()=>{
-  if(shareJob||share.partner||!movie.src||!movie.meta||(minfo&&minfo.mode==='cloud'))return;
-  if(partnerMeta&&same(movie.meta,partnerMeta))return;           // your partner already has this movie: nothing to share
-  share.mine=true;share.pct=0;shareMsg({s:'start'});
-  let last=0;shareJob=shareToCloud(src,{title:movie.meta.name||minfo?.title,dur:movie.meta.dur,onProgress:p=>{share.pct=p;const n=performance.now();if(n-last>1200){last=n;shareMsg({s:'pct',p})}}});
-  const r=await shareJob.done;shareJob=null;share.mine=false;
-  if(r.ok){shareMsg({s:'done'});tip('Movie shared ♥ your partner does not need to choose it')}
-  else{shareMsg({s:'fail'});console.info('[share] not shared:',r.code)}      // PRO_REQUIRED / NO_STORAGE / CORS …: the normal "choose your copy" flow simply stays
- },7000)}
-/** the movie is now in the cloud (partner shared it): load it by itself, unless you already have a good copy */
-async function pullCloud(){if(movie.src)return;const f=await fetchMovieInfo();if(f&&f.mode==='cloud'){minfo=f;await loadCloud()}}
-/** a phone without the file checks every few seconds whether the partner has shared it yet (also covers joining after the upload finished) */
-function watchCloud(){clearInterval(pollT);if(!APP||!minfo||minfo.mode!=='device')return;let n=0;
- pollT=setInterval(()=>{if(movie.src||++n>150){clearInterval(pollT);return}if(!share.mine)pullCloud()},5000)}
-addEventListener('beforeunload',()=>shareJob?.cancel());
-async function loadCloud(){try{const meta=await movie.loadUrl(minfo.url,minfo.title||'Movie');cloudLoaded=true;sync?.send({t:'meta',meta});checkMeta();tip('Movie ready ♥')}catch(err){minfo={...minfo,mode:'device'};tip(err.message+' — choose your own copy of the file instead')}}
-const movieReady=()=>!minfo||minfo.mode==='none'||(movie.src&&(minfo.mode==='cloud'||(partnerMeta&&(appFile||same(movie.meta,partnerMeta)))));
-m.on((s,p)=>{if(s===S.WATCH){if(movie.src){hall.setScreenMap(movie.tex);hall.fitScreen(movie.aspect)}if(p===S.END||p===S.SEATED)movie.seek(0);if(p===S.SEATED)setTimeout(()=>m.state===S.WATCH&&movie.play(),Math.max(0,3200-(applying?Math.round(lat*1000):0)));else if(p===S.PAUSED)remoteStart?playAt(remoteStart.vt,remoteStart.inMs):playAt(movie.time,LEAD);else movie.play()}else if(s===S.PAUSED||s===S.BREAK){cancelStart();movie.pause()}
+ const a=document.createElement('button');a.className='main';iconize(a,'↻ Watch again');a.onclick=()=>{hall.setCurtains(1);m.go(S.WATCH)};ov.appendChild(a);
+ if(APP&&APP.back){const c=document.createElement('button');c.className='ghost';iconize(c,'🎞 Choose another movie');c.onclick=()=>{endSession();markEnded();sync?.close();if(!leaveApp())location.reload()};ov.appendChild(c)}      // like the movie page: pick the next movie on Watch Together
+ const l=document.createElement('button');l.className='ghost';iconize(l,'✕ Leave theatre');l.onclick=()=>{endSession();markEnded();sync?.close();if(!leaveApp())location.reload()};ov.appendChild(l);ov.style.display='flex'}
+/** ends the Twin Hearts session for both (watch history), once */
+let sessionDone=false;function endSession(){if(sessionDone||!APP)return;sessionDone=true;return movie.finish(minfo?.title||movie.meta?.name)}
+m.on((s,p)=>{movie.live=[S.WATCH,S.PAUSED,S.BREAK].includes(s);
+ if(s===S.WATCH){if(movie.src){hall.setScreenMap(movie.tex);hall.fitScreen(movie.aspect)}
+  if(p===S.SEATED){movie.seek(0);movie.pause();if(!applying)setTimeout(()=>{if(m.state===S.WATCH)startRoom()},3200)}      // curtains open, then the movie starts for BOTH through the room
+  else if(p===S.END){movie.seek(0);if(!applying){movie.play();movie.send(true)}}                                           // watch again
+  else if(applying)movie.follow();                                                                                          // the partner resumed: the room already says where we are
+  else{movie.play();movie.send(true)}}                                                                                      // I resumed / ended the break
+ else if(s===S.PAUSED||s===S.BREAK){movie.pause();if(!applying)movie.send(false,s===S.BREAK?'break':null)}
+ else if(s===S.END){movie.pause();if(!applying)movie.send(false,'end')}
  if(s!==S.WATCH&&fullOn)exitFull();if(s===S.DOOR||s===S.ENTER||s===S.EXPLORE||s===S.SEATED)movie.pause();
- if(!applying&&sync&&[S.WATCH,S.PAUSED,S.BREAK,S.END].includes(s))sync.send(s===S.WATCH&&p===S.PAUSED?{t:'ctl',s,vt:movie.time,in:LEAD}:{t:'ctl',s,vt:movie.time});
+ if(!applying&&sync&&[S.WATCH,S.PAUSED,S.BREAK,S.END].includes(s))sync.send({t:'ctl',s});      // the scene (camera, curtains, controls); the movie itself goes through the room
  $('seek').style.display=[S.WATCH,S.PAUSED,S.BREAK].includes(s)?'flex':'none'});
 movie.onend=()=>{if(m.state===S.WATCH)m.go(S.END)};
 movie.onblocked=()=>{const ov=$('ov');ov.innerHTML='';const b=document.createElement('button');b.className='main';b.textContent='▶ Tap to join the movie';b.onclick=()=>{ov.style.display='none';movie.play()};ov.appendChild(b);ov.style.display='flex'};
@@ -269,7 +217,7 @@ function exitFull(){if(fullOn){fullOn=false;placeChat();fv.style.display='none';
 addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&(fullOn||view==='full')){if(fullOn){fullOn=false;fv.style.display='none';movie.v.className='hv';document.body.appendChild(movie.v)}else setView(watchView)}});
 let hideT;const showCtl=()=>{fc.classList.add('show');clearTimeout(hideT);hideT=setTimeout(()=>fc.classList.remove('show'),3000)};
 fv.addEventListener('pointerdown',showCtl);$('fp').onclick=()=>m.go(S.PAUSED);$('fx').onclick=()=>{exitFull();if(view==='full')setView(watchView)};$('fm').onclick=()=>{movie.muted=!movie.muted;$('fm').textContent=movie.muted?'🔇':'🔊'};
-const seekTo=t=>{if(m.state===S.WATCH){playAt(t,LEAD);sync?.send({t:'seek',vt:t,in:LEAD})}else{movie.seek(t);sync?.send({t:'seek',vt:movie.time})}};
+const seekTo=t=>{movie.seek(t);if(m.state===S.WATCH||m.state===S.PAUSED||m.state===S.BREAK)movie.send(m.state===S.WATCH)};      // the same as the Watch Together timeline: seek here, the room moves your partner
 const doSeek=v=>seekTo(Math.max(0,Math.min(v/1000*movie.dur,movie.dur||0)));$('sk').onchange=e=>doSeek(+e.target.value);$('fsk').onchange=e=>doSeek(+e.target.value);
 /* ---- full screen button -> popup with 10 ways to watch from a seat (live thumbnails of the real theatre) ---- */
 const vw=$('vw'),vg=$('vw-g'),cards=new Map(),thumbCam=new THREE.PerspectiveCamera(55,16/9,.1,80),TW=384,TH=216;
@@ -298,7 +246,7 @@ const pl=createPlayer({movie,fmt,
  playPause:()=>m.go(m.state===S.WATCH?S.PAUSED:S.WATCH),
  skip:d=>seekTo(movie.time+d),
  seekFrac:f=>seekTo(f*(movie.dur||0)),
- syncNow:()=>sync?.send({t:'ctl',s:m.state,vt:movie.time}),      // your partner jumps to your time and state
+ syncNow:async()=>{await movie.resync();movie.follow()},      // read the Twin Hearts room and jump to where it is
  end:()=>m.go(S.END),
  seatView:()=>{const v=view==='screen'?'pov:me':'screen';watchView=v;setView(v)},   // "<": screen <-> your own seat
  full:{is:()=>!!document.fullscreenElement||fullOn||view==='full',toggle:()=>document.fullscreenElement||fullOn||view==='full'?exitFull():fsOn()},
@@ -377,7 +325,7 @@ renderer.setAnimationLoop(()=>{const raw=clock.getDelta(),dt=Math.min(raw,.05),t
  if(me&&!studio.on&&m.state===S.DOOR&&!me.script&&!canteen.isOpen&&!me.seated){const lx=me.pos.x,lz=me.pos.z-DOOR_Z,nearC=lz>COUNTER_Z-.7&&Math.abs(lx)<3.5;
   if(nearC&&!atCounter){atCounter=true;target=null;me.face(0,1);canteen.open();crowd.greet(me.pos.x)}else if(!nearC&&lz<COUNTER_Z-1.4)atCounter=false;
   if(lz<1.25&&Math.abs(lx)<1&&role&&(!APP||inv?.isStarted()))startEnter()}
- movie.tick(dt);ads.tick(m.state===S.WATCH&&!applying);const now=performance.now();if(role===1&&sync?.present&&m.state===S.WATCH&&!bufMe&&!bufPartner&&now-lastSync>2500){lastSync=now;sync.send({t:'sync',vt:movie.time,pl:movie.playing})}
+ movie.tick(dt);movie.suspend=ads.active;ads.tick(m.state===S.WATCH&&!applying);const now=performance.now();
  if(movie.dur&&now-lastUI>200){lastUI=now;const v=movie.time/movie.dur*1000,tc=fmt(movie.time),td=fmt(movie.dur);if(!UI.sk.matches(':active'))UI.sk.value=v;if(!UI.fsk.matches(':active'))UI.fsk.value=v;
   if(UI.tcT!==tc){UI.tcT=tc;UI.tc.textContent=UI.ftc.textContent=tc}if(UI.tdT!==td){UI.tdT=td;UI.td.textContent=td}pl.tick()}
  hall.doorTick(dt);doorLogic(dt);pushHands(me);pushHands(partner);chatter.update(dt,t,m.is(S.WATCH));aud.forEach(a=>a.update(dt,t));if(me){me.update(dt,t);partner.update(dt,t);rig.ctx.me.copy(me.pos);rig.ctx.couple.copy(me.pos);if(partner.group.visible)rig.ctx.couple.add(partner.pos).multiplyScalar(.5);sync?.tick(performance.now(),me.av.walk,snap)}{const cx=rig.ctx,[sw,sh]=hall.dims();cx.sw=sw;cx.sh=sh;cx.sy=hall.screen.position.y;if(me){cx.chatT.copy(me.pos);if(partner.group.visible&&me.pos.distanceTo(partner.pos)<2.6)cx.chatT.add(partner.pos).multiplyScalar(.5);if(now-lastPlace>1000){lastPlace=now;placeChat()}}}
@@ -396,8 +344,8 @@ addEventListener('beforeunload',()=>sync?.close());
 if(APP){mountOrient();
  // The movie you already picked in Twin Hearts is asked for IMMEDIATELY (web: postMessage hand-over, Android: the app's own stream) — it no longer waits for the server calls below,
  // so the "choose your copy" prompt never appears when the file is there. It is checked against the picked movie's length once the server answers.
- handshake(f=>{if(f&&!movie.src)(f instanceof Blob?loadFile(f,true):loadDeviceUrl(f,true))});
- if(APP.movieUrl&&!APP.embed)loadDeviceUrl({url:APP.movieUrl,name:APP.movieName},true).finally(fileSettled);
- await join(APP.slot);listenNext(adoptNext);inv=mountInvite({sync:()=>sync,enter:startEnter,stat,hidden:()=>inStudio,askNext:mode=>askNextMovie(mode,minfo?.title),movie:()=>({info:minfo,loaded:movie.src,ready:movieReady(),bad:badFile,pick:loadFile,share})});
- minfo=await fetchMovieInfo();if(minfo?.mode==='cloud')loadCloud();else watchCloud();      // opened from Twin Hearts: avatar + room are already decided
- verifyLength()}
+ handshake(f=>{if(f&&!movie.src)(f instanceof Blob?loadFile(f):loadDeviceUrl(f))});      // the file picked on Watch Together (web: postMessage hand-over, Android: the app's own stream)
+ if(APP.movieUrl&&!APP.embed)loadDeviceUrl({url:APP.movieUrl,name:APP.movieName}).finally(fileSettled);
+ await join(APP.slot);inv=mountInvite({sync:()=>sync,enter:startEnter,stat,hidden:()=>inStudio,movie:()=>({info:minfo,loaded:movie.src,ready:movieReady(),bad:badFile,pick:loadFile})});
+ movie.connect();                                    // the Twin Hearts room: shared clock, realtime channel, polling
+ minfo=await fetchMovieInfo();if(minfo?.mode==='cloud'&&!movie.src)loadCloud()}

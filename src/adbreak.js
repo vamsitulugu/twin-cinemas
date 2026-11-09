@@ -17,7 +17,7 @@ const CSS=`#adbreak{position:fixed;inset:0;z-index:60;background:#000;display:no
 const loadScript=src=>new Promise((res,rej)=>{if(document.querySelector(`script[src="${src}"]`)&&window.google?.ima)return res();const s=document.createElement('script');s.src=src;s.async=true;s.onload=res;s.onerror=rej;document.head.appendChild(s)});
 
 /** movie = the Movie object · send(msg) tells the partner · present() = partner is in the room · leader() = this phone starts the breaks */
-export function createAdBreak({movie,send,present,leader}){
+export function createAdBreak({movie,send,present,leader,onBegin,onResume}){
  let active=false,next=AD.firstAfterMin*60,pre=null,localDone=false,partnerDone=false,wasPlaying=false,waitT=0,pollT=0,root=null,ui={};
  document.head.appendChild(Object.assign(document.createElement('style'),{textContent:CSS}));
  const swallowKeys=e=>{e.stopImmediatePropagation();e.preventDefault()};
@@ -66,7 +66,7 @@ export function createAdBreak({movie,send,present,leader}){
    }).catch(end)})}
 
  /* ---- the break ---- */
- async function begin(){if(active)return;active=true;localDone=false;partnerDone=!present();wasPlaying=movie.playing;movie.pause();
+ async function begin(){if(active)return;active=true;localDone=false;partnerDone=!present();wasPlaying=movie.playing;movie.pause();onBegin?.();
   addEventListener('keydown',swallowKeys,true);build();
   try{await playOwn();await playGoogle()}catch(e){console.warn('ad break',e)}
   finishLocal()}
@@ -76,7 +76,7 @@ export function createAdBreak({movie,send,present,leader}){
   else resume()}
  function resume(){if(!active)return;clearTimeout(waitT);clearInterval(pollT);removeEventListener('keydown',swallowKeys,true);root?.remove();root=null;active=false;
   const every=AD.everyMin*60;next=every>0?(Math.floor(movie.time/every)+1)*every:Infinity;
-  if(wasPlaying)movie.play()}
+  if(wasPlaying)movie.play();onResume?.()}
 
  return{
   get active(){return active},
