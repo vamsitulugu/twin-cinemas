@@ -12,7 +12,7 @@ import {createClient} from '@supabase/supabase-js';
  * The surface used by the rest of the theatre (time, dur, playing, ready, play, pause, seek, tex ...) is the same as before.
  * Without a Twin Hearts room (cinema opened on its own) it is a plain local player: no sync. */
 const env=import.meta.env||{},SB_URL=env.VITE_SUPABASE_URL,SB_KEY=env.VITE_SUPABASE_ANON_KEY;
-const LOAD_MS=30000,STALL_MS=1500,NUDGE=.4,HARD=1.5,COOLDOWN=4000,POLL_MS=2000,DRIFT_MS=1000,CLOCK_MS=45000;
+const LOAD_MS=30000,STALL_MS=3000,GRACE=6000,NUDGE=.4,HARD=2.5,FOLLOW=1.5,COOLDOWN=6000,POLL_MS=2000,DRIFT_MS=1000,CLOCK_MS=45000;
 const ERR={1:'Loading the movie was interrupted',2:'Network problem while loading the movie — check your connection',3:'This video could not be decoded — use an MP4 (H.264 + AAC) copy',4:'This video format is not supported here — use an MP4 (H.264 + AAC) copy'};
 export class Watch{
  /** o = {api, couple, role:'user1'|'user2'} — leave out for a local-only player */
@@ -25,7 +25,7 @@ export class Watch{
   this.onremote=null;this.onstatus=null;                                        // onremote({playing,reason,by}): the partner played / paused / sought · onstatus(text|''): "partner is loading…"
   this.live=false;this.suspend=false;                                           // live: the scene is watching / paused / on a break · suspend: an ad break is running
   this.rm=null;this.lastSeq=0;this.off=0;this.hold=false;this.holdSince=0;this.bufSeq=0;this.lastSeek=0;this.lastGood=0;this.recov=0;this.recAt=0;this.kick=0;this.applying=false;
-  this.stalled=false;this.stallT=0;this.ch=null;this.sb=null;this.busy=false;this.timers=[];this.closed=false;
+  this.rmReason=null;this.lastPlay=0;this.stalled=false;this.stallT=0;this.ch=null;this.sb=null;this.busy=false;this.timers=[];this.closed=false;
   const v=this.v;
   v.addEventListener('ended',()=>this.onend?.());
   v.addEventListener('timeupdate',()=>{if(!v.seeking&&!this.loading)this.lastGood=v.currentTime});
@@ -65,7 +65,7 @@ export class Watch{
  get ready(){return !this.src||(!this.loading&&this.v.readyState>=3&&!this.v.seeking)}
  get aspect(){return this.src&&this.v.videoHeight?this.v.videoWidth/this.v.videoHeight:0}
  get muted(){return this.v.muted}set muted(x){this.v.muted=x}
- play(){if(this.src){this.v.play()?.catch(e=>{if(e&&e.name==='NotAllowedError')this.onblocked?.()})}else this.demo.playing=true}   // AbortError (pause during play) is normal, not "blocked"
+ play(){if(this.src){this.lastPlay=Date.now();this.v.play()?.catch(e=>{if(e&&e.name==='NotAllowedError')this.onblocked?.()})}else this.demo.playing=true}   // AbortError (pause during play) is normal, not "blocked"
  pause(){this.src?this.v.pause():this.demo.playing=false}
  seek(t){t=Math.max(0,Math.min(t,this.dur||t||0));this.lastSeek=Date.now();if(this.src){this.v.playbackRate=1;this.v.currentTime=t}else this.demo.t=t}
  tick(dt){if(!this.src&&this.demo.playing){this.demo.t+=dt;if(this.demo.t>=this.demo.dur){this.demo.t=this.demo.dur;this.demo.playing=false;this.onend?.()}}}
@@ -98,7 +98,7 @@ export class Watch{
  _seq(){return this.lastSeq=Math.max(this.lastSeq+1,Date.now())}
  /** send play / pause / seek. pos = where THIS video is right now, stamped with the shared clock so the partner's position is exact. */
  async act(playing,pos,reason,retry){if(!this.sync)return 0;
-  const seq=this._seq();if(reason==='buffering')this.bufSeq=seq;
+  const seq=this._seq();if(reason==='buffering')this.bufSeq=seq;this.rmReason=reason||null;
   const ts=Math.round(this.now()),p={role:this.role,playing,positionSec:pos,actionSeq:seq,updated_at:new Date(ts).toISOString(),updated_by:this.role,reason:reason||null};
   this.rm={...(this.rm||{}),status:'watching',playing,position_sec:pos,updated_at:p.updated_at,updated_by:this.role,action_seq:seq};   // my own action is the room's truth right away
   try{this.ch?.send({type:'broadcast',event:'wt_state',payload:p})}catch(e){}
@@ -110,10 +110,11 @@ export class Watch{
  /** the partner (web: broadcast, Android: poll) played / paused / sought */
  _remote(p){if(!p||p.actionSeq<=this.lastSeq)return;this.lastSeq=p.actionSeq;
   this.rm={...(this.rm||{}),status:'watching',playing:p.playing,position_sec:p.positionSec,updated_at:p.updated_at,updated_by:p.updated_by,action_seq:p.actionSeq};
-  if(this.hold)this.hold=false;                                 // the partner took over: follow the room, do not fight it
+  this.rmReason=p.reason||null;
+  if(this.hold&&p.reason!=='buffering')this.hold=false;        // the partner took over: follow the room. If they are only loading too, keep waiting for MY video
   if(!this.live||this.suspend)return;                           // kept; follow() applies it when the scene (or the ad break) is over
   this.applying=true;const t=this.expected();
-  if(Math.abs(this.time-t)>(p.playing?.6:.25))this.seek(t);
+  if(Math.abs(this.time-t)>(p.playing?FOLLOW:.25))this.seek(t);
   p.playing?this.play():this.pause();setTimeout(()=>{this.applying=false},250);
   this.onstatus?.(p.playing?'':p.reason==='buffering'?'⏳ Your partner is loading…':'');
   this.onremote?.({playing:p.playing,reason:p.reason||null,by:p.updated_by})}
@@ -127,7 +128,7 @@ export class Watch{
   try{const r=await this._req('GET','');if(!r)return;this.rm=this._settle(r);if(r.action_seq>this.lastSeq)this.lastSeq=r.action_seq;if(this.live&&!this.hold&&!this.suspend)this.follow()}catch(e){}}
  /** bring this video to wherever the room says it should be (after a stall / reconnect / ad break / entering the scene) */
  follow(){const r=this.rm;if(!r||!this.live)return;const t=this.expected(r);
-  if(Math.abs(this.time-t)>.6)this.seek(t);r.playing?this.play():this.pause()}
+  if(Math.abs(this.time-t)>(r.playing?FOLLOW:.25))this.seek(t);r.playing?this.play():this.pause()}
  /** the Sync button: read the authoritative room, jump to its position, never leave it paused */
  async resync(){if(!this.sync)return false;
   try{const r=await this._req('GET','');if(r)this.rm={...(this.rm||{}),...r}}catch(e){}
@@ -141,22 +142,23 @@ export class Watch{
  _ahead(){const v=this.v;try{for(let i=0;i<v.buffered.length;i++)if(v.currentTime>=v.buffered.start(i)-.1&&v.currentTime<=v.buffered.end(i))return v.buffered.end(i)-v.currentTime}catch(e){}return 0}
  _videoReady(){const v=this.v;return v.readyState>=4||(v.readyState>=3&&this._ahead()>=2)}
  _waiting(){if(!this.sync||!this.live||this.suspend||this.hold||!this.src||this.v.ended)return;
+  if(this.v.seeking||Date.now()-Math.max(this.lastSeek,this.lastPlay)<GRACE){clearTimeout(this.stallT);this.stallT=setTimeout(()=>this._waiting(),1000);return}   // our own seek / start: re-check later instead of pausing both
   this.stalled=true;clearTimeout(this.stallT);
-  this.stallT=setTimeout(()=>{if(!this.live||this.suspend||!this.stalled||this.hold)return;if(!this.rm||!this.rm.playing)return;if(this.v.readyState>=3){this.stalled=false;return}this._hold()},STALL_MS)}
+  this.stallT=setTimeout(()=>{if(!this.live||this.suspend||!this.stalled||this.hold)return;if(!this.rm||!this.rm.playing)return;if(this.v.readyState>=3||this._ahead()>.5){this.stalled=false;return}this._hold()},STALL_MS)}
  _hold(){this.hold=true;this.holdSince=Date.now();this.v.pause();this.onstatus?.('⏳ Loading — your partner will wait for you');this.act(false,this.v.currentTime,'buffering')}
  _recovered(force){this.stalled=false;clearTimeout(this.stallT);if(!this.hold)return;if(force!==true&&!this._videoReady())return;
   this.hold=false;this.onstatus?.('');
-  if(this.lastSeq===this.bufSeq){this.play();this.act(true,this.v.currentTime,'resume')}   // nobody else acted while I was loading: I paused it, so I resume it — from where I am
+  if(this.lastSeq===this.bufSeq||(this.rm&&!this.rm.playing&&this.rmReason==='buffering')){this.play();this.act(true,this.v.currentTime,'resume')}   // nobody else acted while I was loading: I paused it, so I resume it — from where I am
   else this.follow()}                                                                     // the partner (or the server) changed things meanwhile: just follow the room
  /* ---------- drift: reads only, never writes to the server ---------- */
  _drift(){const v=this.v;if(!this.sync||!this.live||this.suspend||this.closed)return;
-  if(this.hold){const held=Date.now()-this.holdSince;if(this._videoReady()||(v.readyState>=3&&held>4000))this._recovered(true);return}
+  if(this.hold){const held=Date.now()-this.holdSince;if(this._videoReady()||(v.readyState>=3&&held>4000)||(v.readyState>=2&&held>12000))this._recovered(true);return}
   const r=this.rm;if(!r||!r.playing||this.applying||document.hidden)return;
   if(!this.src){const d=this.expected()-this.demo.t;if(Math.abs(d)>1.2)this.demo.t+=d;return}
   if(v.paused){if(!v.seeking&&v.readyState>=2&&Date.now()-this.kick>3000){this.kick=Date.now();this.follow()}return}   // the room is playing but this video is not: try again, not in a tight loop
   if(v.seeking||v.readyState<3||Date.now()-this.lastSeek<COOLDOWN)return;
   const d=this.expected()-v.currentTime,a=Math.abs(d);
   if(a<NUDGE){if(v.playbackRate!==1)v.playbackRate=1}
-  else if(a<HARD)v.playbackRate=d>0?1.05:.95;
+  else if(a<HARD)v.playbackRate=d>0?1.06:.94;
   else{v.playbackRate=1;this.seek(this.expected())}}}
 export const fmt=s=>{s=Math.max(0,s|0);return`${s/60|0}:${String(s%60).padStart(2,'0')}`};
